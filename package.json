@@ -1,0 +1,74 @@
+{
+	"name": "@ensemble-edge/ensemble",
+	"version": "0.1.0",
+	"type": "module",
+	"description": "Unified CLI for the Ensemble ecosystem - AI orchestration for Cloudflare Workers",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.js"
+		}
+	},
+	"bin": {
+		"ensemble": "./bin/ensemble.js"
+	},
+	"files": [
+		"dist",
+		"bin",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest watch",
+		"build": "tsc",
+		"build:cli": "node scripts/build-cli.js",
+		"dev": "tsc --watch",
+		"typecheck": "tsc --noEmit",
+		"lint": "echo 'Linting... (no eslint config yet)'",
+		"format": "prettier --write \"src/**/*.ts\"",
+		"format:check": "prettier --check \"src/**/*.ts\"",
+		"prepublishOnly": "npm run build"
+	},
+	"dependencies": {
+		"commander": "^12.1.0",
+		"picocolors": "^1.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.19.24",
+		"prettier": "^3.6.2",
+		"typescript": "^5.5.2",
+		"vitest": "~3.2.0"
+	},
+	"keywords": [
+		"cloudflare",
+		"workers",
+		"ai",
+		"orchestration",
+		"edge",
+		"llm",
+		"workflow",
+		"ensemble",
+		"conductor",
+		"edgit",
+		"chamber",
+		"cli"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ensemble-edge/ensemble"
+	},
+	"bugs": {
+		"url": "https://github.com/ensemble-edge/ensemble/issues"
+	},
+	"homepage": "https://github.com/ensemble-edge/ensemble#readme",
+	"author": "Ensemble Edge",
+	"license": "Apache-2.0",
+	"publishConfig": {
+		"access": "public"
+	}
+}
