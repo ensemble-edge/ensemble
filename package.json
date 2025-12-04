@@ -25,13 +25,17 @@
 	"scripts": {
 		"test": "vitest run",
 		"test:watch": "vitest watch",
+		"test:coverage": "vitest run --coverage",
 		"build": "tsc",
-		"build:cli": "node scripts/build-cli.js",
 		"dev": "tsc --watch",
 		"typecheck": "tsc --noEmit",
 		"lint": "echo 'Linting... (no eslint config yet)'",
 		"format": "prettier --write \"src/**/*.ts\"",
 		"format:check": "prettier --check \"src/**/*.ts\"",
+		"validate": "npm run typecheck && npm run format:check && npm run build && npm test",
+		"changeset": "changeset",
+		"version-packages": "changeset version",
+		"release": "changeset publish",
 		"prepublishOnly": "npm run build"
 	},
 	"dependencies": {
@@ -39,6 +43,7 @@
 		"picocolors": "^1.0.0"
 	},
 	"devDependencies": {
+		"@changesets/cli": "^2.29.7",
 		"@types/node": "^20.19.24",
 		"prettier": "^3.6.2",
 		"typescript": "^5.5.2",

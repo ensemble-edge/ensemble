@@ -1,0 +1,32 @@
+# Source files (dist is published)
+src/
+tsconfig.json
+
+# Development
+.github/
+.changeset/
+.planning/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Tests
+**/*.test.ts
+**/__tests__/
+
+# Local env
+.env
+.env.local
+.env.*.local
