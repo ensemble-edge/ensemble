@@ -47,7 +47,16 @@ ensemble/
 │   ├── index.ts          # Main exports
 │   ├── cli.ts            # CLI entry point
 │   ├── router.ts         # Command routing logic
-│   └── version.ts        # Version constant
+│   ├── version.ts        # Version constant
+│   ├── ui/               # Shared UI components
+│   │   ├── index.ts      # UI exports
+│   │   ├── colors.ts     # Brand colors & ANSI mapping
+│   │   ├── spinner.ts    # Animated spinners
+│   │   ├── progress.ts   # Progress bars & step headers
+│   │   ├── hints.ts      # Keyboard input hints
+│   │   ├── box.ts        # Box drawing utilities
+│   │   └── logger.ts     # Logging & banners
+│   └── __tests__/        # Test files
 ├── bin/
 │   └── ensemble.js       # CLI executable
 ├── dist/                 # Build output
@@ -170,7 +179,6 @@ case 'new-product':
 ## Dependencies
 
 ### Runtime
-- `commander` — CLI argument parsing
 - `picocolors` — Terminal colors (lightweight)
 
 ### Development
