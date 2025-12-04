@@ -2,22 +2,30 @@
 
 > Unified CLI for the Ensemble ecosystem - AI orchestration for Cloudflare Workers
 
+The `ensemble` CLI provides a single entry point to the entire Ensemble ecosystem: **Conductor** for AI workflow orchestration, **Edgit** for component versioning, **Chamber** for edge data, and **Cloud** for managed platform connectivity.
+
 ## Installation
 
 ```bash
 npm install -g @ensemble-edge/ensemble
 ```
 
-## Usage
+Or use with npx:
+
+```bash
+npx @ensemble-edge/ensemble --help
+```
+
+## Quick Start
 
 ```bash
 # Initialize a new Conductor project
 ensemble conductor init my-project
 
-# Start development (wrangler passthrough)
+# Start development server
 ensemble dev
 
-# Deploy to production (wrangler passthrough)
+# Deploy to production
 ensemble deploy
 
 # Version components with Edgit
@@ -25,25 +33,157 @@ ensemble edgit init
 ensemble edgit tag create prompt v1.0.0
 ```
 
-## Products
+## Commands
+
+### Products
 
 | Command | Description |
 |---------|-------------|
-| `ensemble conductor` | AI workflow orchestration |
-| `ensemble edgit` | Component versioning |
-| `ensemble chamber` | Edge data layer |
+| `ensemble conductor` | AI workflow orchestration for Cloudflare Workers |
+| `ensemble edgit` | Component versioning (prompts, tools, workflows) |
+| `ensemble chamber` | Edge data layer (coming soon) |
 | `ensemble cloud` | Managed platform connection |
+
+### Global Commands
+
+| Command | Description |
+|---------|-------------|
+| `ensemble login` | Authenticate with Ensemble |
+| `ensemble config` | CLI configuration |
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `-v, --version` | Show version |
+| `-h, --help` | Show help |
+
+## Conductor Commands
+
+Conductor orchestrates AI workflows on Cloudflare Workers.
+
+```bash
+# Show conductor help
+ensemble conductor --help
+
+# Initialize a new project
+ensemble conductor init [name]
+
+# Start development server (wrangler passthrough)
+ensemble conductor dev
+
+# Deploy to production (wrangler passthrough)
+ensemble conductor deploy
+
+# Validate project configuration
+ensemble conductor validate
+
+# Manage API keys
+ensemble conductor keys
+```
+
+## Edgit Commands
+
+Edgit provides semantic versioning for AI components.
+
+```bash
+# Show edgit help
+ensemble edgit --help
+
+# Initialize edgit in current repo
+ensemble edgit init
+
+# Create version tags
+ensemble edgit tag create prompt v1.0.0
+ensemble edgit tag list
+
+# Manage tracked components
+ensemble edgit components list
+ensemble edgit components add prompts/greeting.md
+
+# Manage deployments
+ensemble edgit deploy set prompt prod
+ensemble edgit deploy list
+
+# View version history
+ensemble edgit history prompt
+```
+
+## Cloud Commands
+
+Cloud connects your project to the Ensemble managed platform.
+
+```bash
+# Show cloud help
+ensemble cloud --help
+
+# Initialize cloud connection
+ensemble cloud init
+ensemble cloud init --env staging
+
+# Check connection status
+ensemble cloud status
+
+# Rotate cloud key
+ensemble cloud rotate
+
+# Disable cloud connection
+ensemble cloud disable
+```
+
+## Chamber Commands
+
+Chamber provides an intelligent edge data layer (coming soon).
+
+```bash
+# Show chamber help
+ensemble chamber --help
+
+# Initialize Chamber in project
+ensemble chamber init
+
+# Check cache status
+ensemble chamber status
+```
 
 ## Wrangler Passthrough
 
-All Wrangler commands work directly:
+All Wrangler commands work directly through the `ensemble` CLI:
 
 ```bash
 ensemble dev          # → wrangler dev
 ensemble deploy       # → wrangler deploy
 ensemble tail         # → wrangler tail
+ensemble secret       # → wrangler secret
 ensemble kv           # → wrangler kv
 ensemble d1           # → wrangler d1
+ensemble r2           # → wrangler r2
+ensemble queues       # → wrangler queues
+```
+
+This means you can use `ensemble` as a drop-in replacement for `wrangler` while gaining access to the full Ensemble ecosystem.
+
+## Architecture
+
+```
+ensemble <command> [args]
+    │
+    ├── conductor  → AI workflow orchestration
+    │   ├── init, dev, deploy, validate, keys
+    │   └── (dev/deploy passthrough to wrangler)
+    │
+    ├── edgit      → Component versioning (passthrough to edgit CLI)
+    │   └── init, tag, components, deploy, history
+    │
+    ├── chamber    → Edge data layer (coming soon)
+    │
+    ├── cloud      → Managed platform
+    │   └── init, status, rotate, disable
+    │
+    ├── login      → Authentication
+    ├── config     → CLI configuration
+    │
+    └── *          → Wrangler passthrough (dev, deploy, tail, etc.)
 ```
 
 ## Documentation
@@ -51,7 +191,13 @@ ensemble d1           # → wrangler d1
 - [Ensemble Docs](https://docs.ensemble.ai)
 - [Conductor Docs](https://docs.ensemble.ai/conductor)
 - [Edgit Docs](https://docs.ensemble.ai/edgit)
+- [Chamber Docs](https://docs.ensemble.ai/chamber)
+- [Cloud Docs](https://docs.ensemble.ai/cloud)
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-Apache-2.0
+Apache-2.0 - see [LICENSE](./LICENSE)
