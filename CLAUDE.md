@@ -106,36 +106,151 @@ All commits must follow Conventional Commits format:
 
 ---
 
-## Release Workflow
+## 🚨 CRITICAL: RELEASE WORKFLOW - READ THIS FIRST 🚨
 
 This project uses [Changesets](https://github.com/changesets/changesets) for automated releases.
 
-### Creating a Release
+## 🤖 CLAUDE CODE: Release Workflow (MANDATORY STEPS)
 
-1. **Format code first:**
-   ```bash
-   npm run format
-   ```
+**When user asks to create a release, ALWAYS follow this exact sequence:**
 
-2. **Sync with remote:**
-   ```bash
-   git pull origin main
-   ```
+### Step 0: Run Prettier (CRITICAL - DO THIS FIRST!)
+```bash
+cd /workspace/ensemble/ensemble
+npm run format
+```
 
-3. **Create changeset:**
-   ```bash
-   npx changeset
-   ```
+**Why**:
+- CI/CD tests will fail if code is not properly formatted
+- Prettier auto-fixes formatting issues before committing
+- **NEVER skip this step** - always format before creating changeset
 
-4. **Commit and push:**
-   ```bash
-   git add .changeset/
-   git commit -m "chore: add changeset for X"
-   git push origin main
-   ```
+### Step 1: Sync with Remote (CRITICAL - DO THIS AFTER FORMATTING!)
+```bash
+cd /workspace/ensemble/ensemble
+git pull origin main
+```
 
-5. **GitHub Actions** will create a "Version Packages" PR
-6. **Merge** that PR when ready to publish to npm
+**If pull fails with "divergent branches":**
+```bash
+git pull --no-rebase origin main  # Use merge strategy
+```
+
+**Why**:
+- Prevents merge conflicts later
+- Ensures you're working on latest version
+- Remote may have been updated (Version Packages PR merged, etc.)
+- **NEVER skip this step** - always pull before creating changeset
+
+### Step 2: Check Current Version
+```bash
+grep '"version"' package.json
+```
+**Output the current version to user**
+
+### Step 3: Ask User for Version Bump
+**ALWAYS ASK - NEVER ASSUME**
+
+Show user this table and ask which bump type:
+```
+Current version: X.Y.Z
+
+Bump Options:
+- patch (X.Y.Z+1) - Bug fixes only, no new features
+- minor (X.Y+1.0) - New features, backwards compatible
+- major (X+1.0.0) - Breaking changes
+
+What type of bump do you want?
+```
+
+**Wait for user response. Do not proceed without confirmation.**
+
+### Step 4: Create Changeset
+Only after user confirms, create changeset file manually:
+
+```bash
+# Create .changeset/descriptive-name.md
+```
+
+**Format:**
+```markdown
+---
+"@ensemble-edge/ensemble": patch|minor|major
+---
+
+Brief description of changes
+```
+
+### Step 5: Commit Changeset
+```bash
+git add .changeset/
+git commit -m "chore: add changeset for X"
+```
+
+### Step 6: Push to Remote
+```bash
+git push origin main
+```
+
+### Step 7: Inform User
+Tell user:
+- ✅ Changeset pushed
+- ✅ GitHub Actions will create "Version Packages" PR
+- ✅ Merge that PR when ready to publish to npm
+- ✅ After merge completes and npm publish succeeds, run Step 8
+
+### Step 8: Sync After Release (CRITICAL - DO THIS AFTER MERGE!)
+```bash
+cd /workspace/ensemble/ensemble
+git pull origin main
+```
+
+**Why**:
+- The "Version Packages" PR updates package.json, CHANGELOG.md, and deletes changesets
+- Your local branch is now behind remote after the PR merge
+- Pulling ensures you're working with the latest released version
+- Prevents "diverged branches" errors on next release
+- **ALWAYS do this after confirming npm publish succeeded**
+
+## 🚨 Common Problems and Solutions
+
+### Problem: "Remote has diverged" or "fetch first"
+**Solution:**
+```bash
+git fetch origin
+git log --oneline origin/main -5  # See what changed
+git merge origin/main  # Merge remote changes
+# Then continue with release
+```
+
+### Problem: Merge conflict in package.json
+**Cause:** Working on old version while remote moved forward
+
+**Solution:**
+```bash
+# Accept remote version
+git checkout --theirs package.json
+git add package.json
+git commit -m "chore: resolve version conflict"
+# Then create changeset on TOP of new version
+```
+
+### Problem: User says "version X.Y.Z" but semver doesn't match change type
+**Solution:** ASK USER to confirm:
+```
+⚠️ Semver Check:
+- You requested: X.Y.Z (patch)
+- Changes include: New features (should be minor)
+
+Do you still want patch, or should I use minor?
+```
+
+## Never Do These:
+- ❌ **DO NOT manually edit package.json version or CHANGELOG.md**
+- ❌ **DO NOT manually create or delete tags**
+- ❌ **DO NOT merge Version Packages PR if tests are failing**
+- ❌ **DO NOT create changeset without git pull first**
+- ❌ **DO NOT assume version bump type - ALWAYS ask user**
 
 ---
 
