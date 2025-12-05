@@ -26,12 +26,6 @@ vi.mock("node:fs/promises", () => ({
   copyFile: vi.fn(() => Promise.resolve()),
 }));
 
-// Mock edgit CLI - hybrid integration (direct import, not subprocess)
-// Note: vi.mock is hoisted, so we can't use external variables
-vi.mock("@ensemble-edge/edgit/cli", () => ({
-  runCLI: vi.fn(() => Promise.resolve()),
-}));
-
 // Mock UI module to prevent console output during tests
 vi.mock("../ui/index.js", () => ({
   colors: {
@@ -68,7 +62,6 @@ vi.mock("../ui/index.js", () => ({
 import { route } from "../router.js";
 import { spawn } from "node:child_process";
 import { log, banners } from "../ui/index.js";
-import { runCLI as runEdgitCLI } from "@ensemble-edge/edgit/cli";
 
 describe("router", () => {
   beforeEach(() => {
@@ -95,9 +88,11 @@ describe("router", () => {
 
     it("should route edgit commands", async () => {
       await route(["edgit", "--help"]);
-      // Edgit uses hybrid integration - calls runCLI directly
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining(["edgit", "--help"]),
+      // Edgit uses subprocess spawning via npx
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "--help"],
+        expect.any(Object),
       );
     });
 
@@ -235,58 +230,55 @@ describe("router", () => {
     });
   });
 
-  describe("edgit hybrid integration", () => {
-    it("should call edgit runCLI with no args", async () => {
+  describe("edgit subprocess spawning", () => {
+    it("should spawn edgit via npx with no args", async () => {
       await route(["edgit"]);
-      // Hybrid integration calls runCLI directly instead of spawning subprocess
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining(["edgit"]),
-      );
+      // Subprocess spawning via npx for version decoupling
+      expect(spawn).toHaveBeenCalledWith("npx", ["edgit"], expect.any(Object));
     });
 
-    it("should pass all args to edgit runCLI", async () => {
+    it("should pass all args to edgit subprocess", async () => {
       await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
-      // Verifies args are passed correctly to edgit's runCLI
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining(["edgit", "tag", "create", "prompt", "v1.0.0"]),
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "tag", "create", "prompt", "v1.0.0"],
+        expect.any(Object),
       );
     });
 
     it("should handle edgit init command", async () => {
       await route(["edgit", "init"]);
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining(["edgit", "init"]),
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "init"],
+        expect.any(Object),
       );
     });
 
     it("should handle edgit components command", async () => {
       await route(["edgit", "components", "list"]);
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining(["edgit", "components", "list"]),
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "components", "list"],
+        expect.any(Object),
       );
     });
 
     it("should handle edgit deploy command", async () => {
       await route(["edgit", "deploy", "set", "prompt", "--to", "staging"]);
-      expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          "edgit",
-          "deploy",
-          "set",
-          "prompt",
-          "--to",
-          "staging",
-        ]),
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "deploy", "set", "prompt", "--to", "staging"],
+        expect.any(Object),
       );
     });
 
-    it("should not spawn subprocess for edgit", async () => {
+    it("should spawn edgit status command", async () => {
       await route(["edgit", "status"]);
-      // Spawn should NOT be called for edgit - we use direct import
-      expect(spawn).not.toHaveBeenCalledWith(
-        "edgit",
-        expect.anything(),
-        expect.anything(),
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "status"],
+        expect.any(Object),
       );
     });
   });

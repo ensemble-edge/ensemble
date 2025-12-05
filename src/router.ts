@@ -11,7 +11,6 @@ import { spawn } from "node:child_process";
 import { colors, log, banners } from "./ui/index.js";
 import { routeCloudCommand } from "./commands/cloud.js";
 import { routeConductorCommand } from "./commands/conductor.js";
-import { runCLI as runEdgitCLI } from "@ensemble-edge/edgit/cli";
 
 /**
  * Ensemble products - handled internally or via subprocess
@@ -112,16 +111,16 @@ async function runConductor(args: string[]): Promise<void> {
 /**
  * Run edgit commands
  *
- * Strategy: Hybrid - Direct import of edgit CLI
- * - Edgit exports runCLI() from @ensemble-edge/edgit/cli
- * - No subprocess overhead, shared process context
+ * Strategy: Subprocess spawning for version decoupling
+ * - Spawns edgit as separate process via npx
+ * - Allows ensemble and edgit to version independently
  * - Uses edgit's own help formatting and command routing
  */
 async function runEdgit(args: string[]): Promise<void> {
-  // Build argv array that edgit's main() expects
-  // Format: [node, script, ...args]
-  const argv = [process.argv[0] ?? "node", "edgit", ...args];
-  await runEdgitCLI(argv);
+  await spawnCommand("npx", ["edgit", ...args], {
+    notFoundMessage:
+      "Edgit not found.\nInstall: npm install -g @ensemble-edge/edgit\nOr: npm install @ensemble-edge/edgit",
+  });
 }
 
 /**
