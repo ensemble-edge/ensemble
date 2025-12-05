@@ -50,3 +50,15 @@ export {
 
 // Logger
 export { log, banners, printCommand, printUrl } from "./logger.js";
+
+// Prompts
+export {
+  promptConfirm,
+  promptText,
+  promptSelect,
+  promptPassword,
+  promptMultiSelect,
+  isInteractive,
+  isCI,
+} from "./prompts.js";
+export type { Choice } from "./prompts.js";

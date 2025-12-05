@@ -1,9 +1,0 @@
-name: fetch-latest-posts
-operation: code
-handler: ./index.ts
-description: Fetches latest blog posts from D1 database for homepage
-
-schema:
-  input: {}
-  output:
-    rows: array

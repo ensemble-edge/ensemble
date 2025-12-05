@@ -43,12 +43,12 @@ describe("cli", () => {
   });
 
   describe("run()", () => {
-    it("should show help when no arguments provided", async () => {
+    it("should launch wizard when no arguments provided", async () => {
+      // npx @ensemble-edge/ensemble (no args) launches the wizard
       await run(["node", "ensemble"]);
 
-      expect(banners.ensemble).toHaveBeenCalled();
-      expect(consoleLogSpy).toHaveBeenCalled();
-      expect(route).not.toHaveBeenCalled();
+      // Should route to wizard (empty args array)
+      expect(route).toHaveBeenCalledWith([]);
     });
 
     it("should show help with --help flag", async () => {

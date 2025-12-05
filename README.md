@@ -1,36 +1,36 @@
 # @ensemble-edge/ensemble
 
-> Unified CLI for the Ensemble ecosystem - AI orchestration for Cloudflare Workers
+> Unified CLI for the Ensemble ecosystem — edge-native AI orchestration built exclusively for Cloudflare
 
 The `ensemble` CLI provides a single entry point to the entire Ensemble ecosystem: **Conductor** for AI workflow orchestration, **Edgit** for component versioning, **Chamber** for edge data, and **Cloud** for managed platform connectivity.
 
-## Installation
-
-```bash
-npm install -g @ensemble-edge/ensemble
-```
-
-Or use with npx:
-
-```bash
-npx @ensemble-edge/ensemble --help
-```
+Built on Cloudflare's infrastructure: Workers, Workers AI, KV, D1, R2, Durable Objects, Queues, and Vectorize.
 
 ## Quick Start
 
 ```bash
-# Initialize a new Conductor project
-ensemble conductor init my-project
+# Launch the interactive wizard (no installation needed)
+npx @ensemble-edge/ensemble
+
+# Or create a project directly
+npx @ensemble-edge/ensemble conductor init my-project
+cd my-project
 
 # Start development server
-ensemble dev
+npm run dev
 
 # Deploy to production
-ensemble deploy
+npx wrangler deploy
 
 # Version components with Edgit
-ensemble edgit init
-ensemble edgit tag create prompt v1.0.0
+npx @ensemble-edge/edgit init
+npx @ensemble-edge/edgit tag create prompt v1.0.0
+```
+
+For CI/CD pipelines, use the `-y` flag to skip interactive prompts:
+
+```bash
+npx @ensemble-edge/conductor init my-project -y
 ```
 
 ## Commands

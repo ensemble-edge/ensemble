@@ -39,11 +39,14 @@ ${colors.bold("Wrangler (passthrough):")}
   dev, deploy, tail, secret, kv, d1, r2...
   All wrangler commands work directly.
 
+${colors.bold("Getting Started:")}
+  ${colors.accent("npx @ensemble-edge/ensemble")}
+
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
   ${colors.accent("ensemble edgit tag create prompt v1.0.0")}
-  ${colors.accent("ensemble dev")}
-  ${colors.accent("ensemble deploy")}
+  ${colors.accent("pnpm run dev")}
+  ${colors.accent("pnpm run deploy")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai")}
 `);
@@ -57,7 +60,7 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   const args = argv.slice(2);
 
   // Handle global flags
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+  if (args[0] === "--help" || args[0] === "-h") {
     printHelp();
     showEcosystemStatus();
     return;
@@ -68,7 +71,7 @@ export async function run(argv: string[] = process.argv): Promise<void> {
     return;
   }
 
-  // Route the command
+  // Route the command (empty args launches wizard!)
   try {
     await route(args);
   } catch (error) {

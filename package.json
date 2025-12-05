@@ -23,7 +23,6 @@
 	"files": [
 		"dist",
 		"bin",
-		"templates",
 		"README.md",
 		"LICENSE"
 	],
@@ -44,11 +43,13 @@
 		"prepublishOnly": "npm run build"
 	},
 	"dependencies": {
-		"picocolors": "^1.0.0"
+		"picocolors": "^1.0.0",
+		"prompts": "^2.4.2"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.29.7",
 		"@types/node": "^20.19.24",
+		"@types/prompts": "^2.4.9",
 		"prettier": "^3.6.2",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0"

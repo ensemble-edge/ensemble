@@ -5,14 +5,15 @@ vi.mock("node:child_process", () => ({
   spawn: vi.fn(() => ({
     on: vi.fn((event, callback) => {
       if (event === "close") {
-        // Simulate successful command execution
         setTimeout(() => callback(0), 0);
       }
     }),
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
   })),
 }));
 
-// Mock fs modules for conductor commands
+// Mock fs modules
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(() => false),
 }));
@@ -26,7 +27,7 @@ vi.mock("node:fs/promises", () => ({
   copyFile: vi.fn(() => Promise.resolve()),
 }));
 
-// Mock UI module to prevent console output during tests
+// Mock UI module
 vi.mock("../ui/index.js", () => ({
   colors: {
     bold: (s: string) => s,
@@ -43,6 +44,8 @@ vi.mock("../ui/index.js", () => ({
     warn: vi.fn(),
     info: vi.fn(),
     dim: vi.fn(),
+    newline: vi.fn(),
+    plain: vi.fn(),
   },
   banners: {
     ensemble: vi.fn(),
@@ -53,16 +56,23 @@ vi.mock("../ui/index.js", () => ({
   },
   createSpinner: vi.fn(() => ({
     start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
     success: vi.fn().mockReturnThis(),
     error: vi.fn().mockReturnThis(),
     warn: vi.fn().mockReturnThis(),
   })),
-  successBox: vi.fn((title, content) => `${title}\n${content}`),
+  promptConfirm: vi.fn().mockResolvedValue(false),
+  promptText: vi.fn().mockResolvedValue("my-project"),
+  promptSelect: vi.fn().mockResolvedValue("conductor"),
+  promptPassword: vi.fn().mockResolvedValue(""),
+  isInteractive: vi.fn().mockReturnValue(false),
+  isCI: vi.fn().mockReturnValue(true),
 }));
 
 import { route } from "../router.js";
 import { spawn } from "node:child_process";
 import { log, banners } from "../ui/index.js";
+import { writeFile } from "node:fs/promises";
 
 describe("router", () => {
   beforeEach(() => {
@@ -75,10 +85,17 @@ describe("router", () => {
   });
 
   describe("route()", () => {
-    it("should handle empty command array", async () => {
+    it("should launch wizard with empty command array", async () => {
+      // npx @ensemble-edge/ensemble (no args) launches the wizard
       await route([]);
-      expect(log.dim).toHaveBeenCalledWith(
-        "No command provided. Run `ensemble --help` for usage.",
+
+      // Should show ensemble banner
+      expect(banners.ensemble).toHaveBeenCalled();
+
+      // Should create package.json with conductor dependency
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("package.json"),
+        expect.stringContaining("@ensemble-edge/conductor"),
       );
     });
 
@@ -89,12 +106,7 @@ describe("router", () => {
 
     it("should route edgit commands", async () => {
       await route(["edgit", "--help"]);
-      // Edgit uses subprocess spawning via npx
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "--help"],
-        expect.any(Object),
-      );
+      expect(banners.edgit).toHaveBeenCalled();
     });
 
     it("should route chamber commands", async () => {
@@ -136,56 +148,85 @@ describe("router", () => {
     });
   });
 
-  describe("conductor subcommands", () => {
+  describe("product init commands", () => {
+    it("should run conductor init wizard", async () => {
+      await route(["conductor", "init"]);
+
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("package.json"),
+        expect.stringContaining("@ensemble-edge/conductor"),
+      );
+    });
+
+    it("should run edgit init wizard", async () => {
+      await route(["edgit", "init"]);
+
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("package.json"),
+        expect.stringContaining("@ensemble-edge/edgit"),
+      );
+    });
+
+    it("should show coming soon for chamber init", async () => {
+      await route(["chamber", "init"]);
+      expect(log.warn).toHaveBeenCalledWith("Chamber is coming soon!");
+    });
+
+    it("should show coming soon for cloud init", async () => {
+      await route(["cloud", "init"]);
+      expect(log.warn).toHaveBeenCalledWith("Cloud init is coming soon!");
+    });
+  });
+
+  describe("conductor non-init commands", () => {
     it("should show help with no args", async () => {
       await route(["conductor"]);
       expect(banners.conductor).toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
     });
 
-    it("should show help with -h flag", async () => {
-      await route(["conductor", "-h"]);
-      expect(banners.conductor).toHaveBeenCalled();
-    });
-
-    it("should handle conductor init (bundled templates)", async () => {
-      await route(["conductor", "init"]);
-      // Init now uses bundled templates - banner is always shown
-      // In test environment with mocked fs (existsSync returns false), templates won't be found
-      // so it will show an error about missing templates
-      expect(banners.conductor).toHaveBeenCalled();
-      expect(log.error).toHaveBeenCalledWith(
-        "Conductor templates are missing from the ensemble CLI package.",
-      );
-    });
-
-    it("should passthrough conductor dev to wrangler", async () => {
+    it("should delegate conductor dev to npx", async () => {
       await route(["conductor", "dev"]);
       expect(spawn).toHaveBeenCalledWith(
-        "wrangler",
-        ["dev"],
+        "npx",
+        ["@ensemble-edge/conductor", "dev"],
         expect.any(Object),
       );
     });
 
-    it("should passthrough conductor deploy to wrangler", async () => {
+    it("should delegate conductor deploy to npx", async () => {
       await route(["conductor", "deploy"]);
       expect(spawn).toHaveBeenCalledWith(
-        "wrangler",
-        ["deploy"],
+        "npx",
+        ["@ensemble-edge/conductor", "deploy"],
         expect.any(Object),
       );
     });
 
-    it("should handle conductor validate (requires conductor project)", async () => {
+    it("should delegate conductor validate to npx", async () => {
       await route(["conductor", "validate"]);
-      // Not in a conductor project
-      expect(log.error).toHaveBeenCalledWith("Not a Conductor project.");
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["@ensemble-edge/conductor", "validate"],
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe("edgit non-init commands", () => {
+    it("should show help with no args", async () => {
+      await route(["edgit"]);
+      expect(banners.edgit).toHaveBeenCalled();
     });
 
-    it("should handle conductor keys", async () => {
-      await route(["conductor", "keys"]);
-      expect(log.warn).toHaveBeenCalledWith(
-        "Key management via ensemble CLI coming soon...",
+    it("should delegate edgit tag to npx", async () => {
+      await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
+      expect(spawn).toHaveBeenCalledWith(
+        "npx",
+        ["edgit", "tag", "create", "prompt", "v1.0.0"],
+        expect.any(Object),
       );
     });
   });
@@ -201,32 +242,8 @@ describe("router", () => {
       expect(banners.cloud).toHaveBeenCalled();
     });
 
-    it("should show help with --help flag", async () => {
-      await route(["cloud", "--help"]);
-      expect(banners.cloud).toHaveBeenCalled();
-    });
-
-    it("should handle cloud init (requires wrangler.toml)", async () => {
-      await route(["cloud", "init"]);
-      // Without wrangler.toml, shows error
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
-    });
-
     it("should handle cloud status (requires wrangler.toml)", async () => {
       await route(["cloud", "status"]);
-      // Without wrangler.toml, shows error
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
-    });
-
-    it("should handle cloud rotate (requires confirmation)", async () => {
-      await route(["cloud", "rotate"]);
-      // Without wrangler.toml, shows error
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
-    });
-
-    it("should handle cloud disable (requires confirmation)", async () => {
-      await route(["cloud", "disable"]);
-      // Without wrangler.toml, shows error
       expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
     });
 
@@ -236,67 +253,14 @@ describe("router", () => {
     });
   });
 
-  describe("edgit subprocess spawning", () => {
-    it("should spawn edgit via npx with no args", async () => {
-      await route(["edgit"]);
-      // Subprocess spawning via npx for version decoupling
-      expect(spawn).toHaveBeenCalledWith("npx", ["edgit"], expect.any(Object));
-    });
-
-    it("should pass all args to edgit subprocess", async () => {
-      await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "tag", "create", "prompt", "v1.0.0"],
-        expect.any(Object),
-      );
-    });
-
-    it("should handle edgit init command", async () => {
-      await route(["edgit", "init"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "init"],
-        expect.any(Object),
-      );
-    });
-
-    it("should handle edgit components command", async () => {
-      await route(["edgit", "components", "list"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "components", "list"],
-        expect.any(Object),
-      );
-    });
-
-    it("should handle edgit deploy command", async () => {
-      await route(["edgit", "deploy", "set", "prompt", "--to", "staging"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "deploy", "set", "prompt", "--to", "staging"],
-        expect.any(Object),
-      );
-    });
-
-    it("should spawn edgit status command", async () => {
-      await route(["edgit", "status"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "status"],
-        expect.any(Object),
-      );
-    });
-  });
-
   describe("chamber commands", () => {
     it("should show help with no args", async () => {
       await route(["chamber"]);
       expect(banners.chamber).toHaveBeenCalled();
     });
 
-    it("should handle chamber subcommands (coming soon)", async () => {
-      await route(["chamber", "init"]);
+    it("should show coming soon for subcommands", async () => {
+      await route(["chamber", "status"]);
       expect(log.warn).toHaveBeenCalledWith("Chamber commands coming soon...");
     });
   });
