@@ -59,6 +59,7 @@ vi.mock("../ui/index.js", () => ({
     start: vi.fn().mockReturnThis(),
     success: vi.fn().mockReturnThis(),
     error: vi.fn().mockReturnThis(),
+    warn: vi.fn().mockReturnThis(),
   })),
   successBox: vi.fn((title, content) => `${title}\n${content}`),
 }));
@@ -103,8 +104,11 @@ describe("conductor commands", () => {
 
     it("should route to init command", async () => {
       await routeConductorCommand(["init"]);
-      // Without conductor package, shows info message
-      expect(log.info).toHaveBeenCalledWith("Install Conductor first:");
+      // With bundled templates (but mocked fs returning false), shows missing templates error
+      expect(banners.conductor).toHaveBeenCalled();
+      expect(log.error).toHaveBeenCalledWith(
+        "Conductor templates are missing from the ensemble CLI package.",
+      );
     });
 
     it("should route to validate command", async () => {
@@ -129,17 +133,20 @@ describe("conductor commands", () => {
   });
 
   describe("conductorInit", () => {
-    it("should require conductor package installed", async () => {
+    it("should show error when templates not found", async () => {
       await conductorInit([]);
       expect(banners.conductor).toHaveBeenCalled();
-      expect(log.info).toHaveBeenCalledWith("Install Conductor first:");
+      // With mocked fs (existsSync returns false), templates won't be found
+      expect(log.error).toHaveBeenCalledWith(
+        "Conductor templates are missing from the ensemble CLI package.",
+      );
     });
 
-    it("should show help for npx fallback", async () => {
+    it("should show banner for init with directory", async () => {
       const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await conductorInit(["my-project"]);
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(banners.conductor).toHaveBeenCalled();
 
       consoleSpy.mockRestore();
     });

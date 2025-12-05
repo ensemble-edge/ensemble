@@ -55,6 +55,7 @@ vi.mock("../ui/index.js", () => ({
     start: vi.fn().mockReturnThis(),
     success: vi.fn().mockReturnThis(),
     error: vi.fn().mockReturnThis(),
+    warn: vi.fn().mockReturnThis(),
   })),
   successBox: vi.fn((title, content) => `${title}\n${content}`),
 }));
@@ -146,10 +147,15 @@ describe("router", () => {
       expect(banners.conductor).toHaveBeenCalled();
     });
 
-    it("should handle conductor init (requires conductor package)", async () => {
+    it("should handle conductor init (bundled templates)", async () => {
       await route(["conductor", "init"]);
-      // Without conductor package installed, shows info message
-      expect(log.info).toHaveBeenCalledWith("Install Conductor first:");
+      // Init now uses bundled templates - banner is always shown
+      // In test environment with mocked fs (existsSync returns false), templates won't be found
+      // so it will show an error about missing templates
+      expect(banners.conductor).toHaveBeenCalled();
+      expect(log.error).toHaveBeenCalledWith(
+        "Conductor templates are missing from the ensemble CLI package.",
+      );
     });
 
     it("should passthrough conductor dev to wrangler", async () => {
