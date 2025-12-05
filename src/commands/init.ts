@@ -3,17 +3,18 @@
  *
  * Entry point for: npx @ensemble-edge/ensemble
  *
- * Flow:
- * 1. Product selection (Conductor/Edgit/Chamber/Cloud)
- * 2. Project name
- * 3. Create directory + package.json with product as dependency
- * 4. npm install
- * 5. Run product's init (now local, fast)
- * 6. Product-specific optional wizards
+ * Fixed Flow:
+ * 1. Show Ensemble banner (ONCE)
+ * 2. Product selection → show confirmation line (no second banner)
+ * 3. Project name
+ * 4. Create project structure (via product init)
+ * 5. Install dependencies (silent, with clean output)
+ * 6. Configuration prompts (only if init succeeded)
+ * 7. Success box (only if everything succeeded)
  */
 
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import {
@@ -26,6 +27,8 @@ import {
   promptSelect,
   isInteractive,
   isCI,
+  successBox,
+  showNestedSuccess,
 } from "../ui/index.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,6 +42,18 @@ interface InitOptions {
   yes?: boolean;
   skipInstall?: boolean;
   packageManager?: PackageManager;
+}
+
+interface InitResult {
+  success: boolean;
+  files?: string[];
+  error?: string;
+}
+
+interface InstallResult {
+  success: boolean;
+  packages?: Array<{ name: string; version: string }>;
+  error?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +95,16 @@ const PRODUCTS: Record<
   },
 };
 
+// Key packages to highlight in install output
+const HIGHLIGHT_PACKAGES = [
+  "@ensemble-edge/conductor",
+  "@ensemble-edge/edgit",
+  "@ensemble-edge/cloud",
+  "wrangler",
+  "typescript",
+  "vitest",
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Package Manager Detection
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,18 +118,21 @@ function detectPackageManager(): PackageManager {
 
   // Check npm_config_user_agent for how the command was invoked
   const userAgent = process.env.npm_config_user_agent || "";
+  if (userAgent.includes("pnpm")) return "pnpm";
   if (userAgent.includes("yarn")) return "yarn";
   if (userAgent.includes("bun")) return "bun";
-  if (userAgent.includes("npm")) return "npm";
 
-  // Default to pnpm (recommended for Ensemble projects)
-  return "pnpm";
+  // Default to npm (most universally available)
+  return "npm";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Spawn Helper
+// Spawn Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Run a command with inherited stdio (visible output)
+ */
 async function runCommand(
   command: string,
   args: string[],
@@ -127,49 +155,204 @@ async function runCommand(
   });
 }
 
+/**
+ * Run a command silently, capturing output
+ */
+async function runCommandSilent(
+  command: string,
+  args: string[],
+  cwd?: string,
+): Promise<{ success: boolean; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: "pipe",
+      shell: true,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("close", (code) => {
+      resolve({ success: code === 0, stdout, stderr });
+    });
+
+    child.on("error", (err) => {
+      resolve({ success: false, stdout, stderr: err.message });
+    });
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Create Project
+// Directory Validation
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function createProject(
+function isDirectoryEmpty(dir: string): boolean {
+  if (!existsSync(dir)) return true;
+  const files = readdirSync(dir);
+  return files.length === 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Create Project Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function createProjectStructure(
   projectName: string,
   product: Product,
-  pm: PackageManager,
-): Promise<string> {
+): Promise<InitResult> {
   const targetDir = resolve(process.cwd(), projectName);
 
-  // Create directory
-  if (!existsSync(targetDir)) {
-    await mkdir(targetDir, { recursive: true });
+  try {
+    // Create directory if it doesn't exist
+    if (!existsSync(targetDir)) {
+      await mkdir(targetDir, { recursive: true });
+    }
+
+    // Check if directory is empty
+    if (!isDirectoryEmpty(targetDir)) {
+      return {
+        success: false,
+        error: `Directory '${projectName}' is not empty`,
+      };
+    }
+
+    // Create package.json with product as dependency
+    const productConfig = PRODUCTS[product];
+    const packageJson = {
+      name: projectName,
+      version: "0.0.1",
+      type: "module",
+      scripts: {
+        dev: "wrangler dev",
+        deploy: "wrangler deploy",
+        test: "vitest run",
+      },
+      dependencies: {
+        [productConfig.package]: "latest",
+      },
+      devDependencies: {
+        wrangler: "^4.0.0",
+        vitest: "^3.0.0",
+        typescript: "^5.0.0",
+      },
+    };
+
+    const files: string[] = [];
+
+    // Write package.json
+    await writeFile(
+      resolve(targetDir, "package.json"),
+      JSON.stringify(packageJson, null, 2),
+    );
+    files.push("package.json");
+
+    // Create basic project structure based on product
+    if (product === "conductor") {
+      // Create conductor-specific structure
+      await mkdir(resolve(targetDir, "src"), { recursive: true });
+      await mkdir(resolve(targetDir, "agents"), { recursive: true });
+      await mkdir(resolve(targetDir, "ensembles"), { recursive: true });
+      await mkdir(resolve(targetDir, "prompts"), { recursive: true });
+      await mkdir(resolve(targetDir, "queries"), { recursive: true });
+      await mkdir(resolve(targetDir, "configs"), { recursive: true });
+
+      // Create wrangler.toml
+      await writeFile(
+        resolve(targetDir, "wrangler.toml"),
+        `name = "${projectName}"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[ai]
+binding = "AI"
+`,
+      );
+      files.push("wrangler.toml");
+
+      // Create tsconfig.json
+      await writeFile(
+        resolve(targetDir, "tsconfig.json"),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              target: "ES2022",
+              module: "ESNext",
+              moduleResolution: "bundler",
+              strict: true,
+              esModuleInterop: true,
+              skipLibCheck: true,
+              types: ["@cloudflare/workers-types"],
+            },
+            include: ["src/**/*", "agents/**/*"],
+          },
+          null,
+          2,
+        ),
+      );
+      files.push("tsconfig.json");
+
+      // Create basic index.ts
+      await writeFile(
+        resolve(targetDir, "src/index.ts"),
+        `export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    return new Response("Hello from Conductor!", {
+      headers: { "content-type": "text/plain" },
+    });
+  },
+};
+
+interface Env {
+  AI: Ai;
+}
+`,
+      );
+      files.push("src/index.ts");
+
+      files.push("agents/");
+      files.push("ensembles/");
+      files.push("prompts/");
+      files.push("queries/");
+      files.push("configs/");
+    } else if (product === "edgit") {
+      // Create edgit-specific structure
+      await mkdir(resolve(targetDir, ".edgit"), { recursive: true });
+
+      await writeFile(
+        resolve(targetDir, ".edgit/components.json"),
+        JSON.stringify({ components: [] }, null, 2),
+      );
+      files.push(".edgit/components.json");
+    } else if (product === "cloud") {
+      // Create cloud-specific structure
+      await mkdir(resolve(targetDir, "src"), { recursive: true });
+
+      await writeFile(
+        resolve(targetDir, "wrangler.toml"),
+        `name = "${projectName}"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+`,
+      );
+      files.push("wrangler.toml");
+    }
+
+    return { success: true, files };
+  } catch (error) {
+    return {
+      success: false,
+      error: (error as Error).message,
+    };
   }
-
-  // Create package.json with product as dependency
-  const productConfig = PRODUCTS[product];
-  const packageJson = {
-    name: projectName,
-    version: "0.0.1",
-    type: "module",
-    scripts: {
-      dev: "wrangler dev",
-      deploy: "wrangler deploy",
-      test: "vitest run",
-    },
-    dependencies: {
-      [productConfig.package]: "latest",
-    },
-    devDependencies: {
-      wrangler: "^4.0.0",
-      vitest: "^3.0.0",
-      typescript: "^5.0.0",
-    },
-  };
-
-  await writeFile(
-    resolve(targetDir, "package.json"),
-    JSON.stringify(packageJson, null, 2),
-  );
-
-  return targetDir;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,49 +362,43 @@ async function createProject(
 async function installDependencies(
   targetDir: string,
   pm: PackageManager,
-): Promise<boolean> {
-  const spinner = createSpinner(
-    `Installing dependencies with ${pm}...`,
-  ).start();
+): Promise<InstallResult> {
+  // Run install silently
+  const result = await runCommandSilent(pm, ["install"], targetDir);
 
-  const success = await runCommand(pm, ["install"], targetDir);
-
-  if (success) {
-    spinner.success({ text: "Dependencies installed" });
-  } else {
-    spinner.error({ text: `Install failed - run '${pm} install' manually` });
+  if (!result.success) {
+    return {
+      success: false,
+      error: result.stderr || "Install failed",
+    };
   }
 
-  return success;
-}
+  // Read package.json to get installed packages
+  try {
+    const pkgPath = resolve(targetDir, "package.json");
+    const pkgContent = await readFile(pkgPath, "utf-8");
+    const pkg = JSON.parse(pkgContent);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Run Product Init
-// ─────────────────────────────────────────────────────────────────────────────
+    const packages: Array<{ name: string; version: string }> = [];
 
-async function runProductInit(
-  targetDir: string,
-  product: Product,
-  options: InitOptions,
-): Promise<boolean> {
-  const args = ["init", "."];
+    // Get actual installed versions from node_modules or lockfile
+    // For simplicity, we use the specified versions from package.json
+    for (const [name, version] of Object.entries(pkg.dependencies || {})) {
+      if (HIGHLIGHT_PACKAGES.some((h) => name.includes(h))) {
+        packages.push({ name, version: String(version) });
+      }
+    }
+    for (const [name, version] of Object.entries(pkg.devDependencies || {})) {
+      if (HIGHLIGHT_PACKAGES.some((h) => name.includes(h))) {
+        packages.push({ name, version: String(version) });
+      }
+    }
 
-  if (options.yes) {
-    args.push("--yes");
+    return { success: true, packages };
+  } catch {
+    // Even if we can't read packages, install succeeded
+    return { success: true, packages: [] };
   }
-
-  // Run the product's local init command via npx (now it's installed locally)
-  const spinner = createSpinner(`Running ${product} init...`).start();
-
-  const success = await runCommand("npx", [product, ...args], targetDir);
-
-  if (success) {
-    spinner.success({ text: `${PRODUCTS[product].name} initialized` });
-  } else {
-    spinner.error({ text: `${product} init failed` });
-  }
-
-  return success;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,8 +417,11 @@ export async function initWizard(
 ): Promise<void> {
   const interactive = !options.yes && isInteractive() && !isCI();
 
+  // Track if everything succeeded for final message
+  let allSucceeded = true;
+
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 1: Show banner
+  // Step 1: Show banner (ONCE - the Ensemble banner)
   // ─────────────────────────────────────────────────────────────────────────
 
   banners.ensemble();
@@ -260,7 +440,7 @@ export async function initWizard(
         value: key as Product,
       }));
 
-    // Add coming soon items (keep their actual value for specific messaging)
+    // Add coming soon items
     const comingSoon = Object.entries(PRODUCTS)
       .filter(([_, config]) => !config.available)
       .map(([key, config]) => ({
@@ -286,31 +466,36 @@ export async function initWizard(
       return;
     }
 
-    // Show product-specific banner after selection
+    // Show confirmation line (NOT a second banner)
+    console.log(
+      `${colors.success("✔")} ${PRODUCTS[product].name} - ${PRODUCTS[product].description}`,
+    );
     log.newline();
-    showProductBanner(product);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Step 3: Project name
   // ─────────────────────────────────────────────────────────────────────────
 
-  let projectName = "my-project";
+  let projectName = `my-${product}-project`;
 
   if (interactive) {
-    projectName = await promptText("Project name:", `my-${product}-project`, {
+    projectName = await promptText("Project name:", projectName, {
       validate: (value) => {
         if (!value.trim()) return "Project name is required";
         if (!/^[a-z0-9-_]+$/i.test(value)) {
           return "Use only letters, numbers, dashes, and underscores";
         }
-        if (existsSync(resolve(process.cwd(), value))) {
-          return `Directory '${value}' already exists`;
+        const targetDir = resolve(process.cwd(), value);
+        if (existsSync(targetDir) && !isDirectoryEmpty(targetDir)) {
+          return `Directory '${value}' already exists and is not empty`;
         }
         return true;
       },
     });
   }
+
+  log.newline();
 
   // ─────────────────────────────────────────────────────────────────────────
   // Step 4: Detect package manager
@@ -318,77 +503,110 @@ export async function initWizard(
 
   const pm = options.packageManager || detectPackageManager();
 
-  log.newline();
-  log.info(
-    `Creating ${colors.bold(projectName)} with ${PRODUCTS[product].name}...`,
-  );
-  log.newline();
-
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 5: Create project directory + package.json
+  // Step 5: Create project structure
   // ─────────────────────────────────────────────────────────────────────────
 
-  const spinner = createSpinner("Creating project...").start();
+  log.info(`Creating ${PRODUCTS[product].name} project...`);
 
-  let targetDir: string;
-  try {
-    targetDir = await createProject(projectName, product, pm);
-    spinner.success({ text: "Project created" });
-  } catch (error) {
-    spinner.error({ text: "Failed to create project" });
-    log.error((error as Error).message);
-    return;
+  const initResult = await createProjectStructure(projectName, product);
+
+  if (!initResult.success) {
+    log.error(`Failed to create project structure`);
+    log.newline();
+    log.plain(initResult.error || "Unknown error");
+    log.newline();
+    log.plain("To fix:");
+    console.log(`  ${colors.accent(`rm -rf ${projectName}`)}`);
+    console.log(`  ${colors.accent(`ensemble ${product} init ${projectName}`)}`);
+    return; // FAIL FAST - don't continue
+  }
+
+  log.success("Created project structure");
+
+  // Show files created
+  if (initResult.files) {
+    for (const file of initResult.files) {
+      showNestedSuccess(file);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 6: Install dependencies
+  // Step 6: Install dependencies (silent with clean output)
   // ─────────────────────────────────────────────────────────────────────────
 
+  const targetDir = resolve(process.cwd(), projectName);
+
   if (!options.skipInstall) {
-    const installed = await installDependencies(targetDir, pm);
-    if (!installed) {
-      log.warn(`Run '${pm} install' in ${projectName} to complete setup`);
+    log.newline();
+    const spinner = createSpinner("Installing dependencies...").start();
+
+    const installResult = await installDependencies(targetDir, pm);
+
+    if (!installResult.success) {
+      spinner.error({ text: "Failed to install dependencies" });
+      log.newline();
+      log.plain(installResult.error || "Unknown error");
+      log.newline();
+      log.plain("To retry:");
+      console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+      console.log(`  ${colors.accent(`${pm} install`)}`);
+      allSucceeded = false;
+      // Continue to show next steps, but don't show success box
+    } else {
+      spinner.success({ text: "Installed dependencies" });
+
+      // Show key packages
+      if (installResult.packages && installResult.packages.length > 0) {
+        for (const pkg of installResult.packages) {
+          showNestedSuccess(`${pkg.name}@${pkg.version}`);
+        }
+      }
     }
   } else {
+    log.newline();
     log.dim("Skipping install (--skip-install)");
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 7: Run product's init command
+  // Step 7: Configuration prompts (only if install succeeded)
   // ─────────────────────────────────────────────────────────────────────────
 
-  if (!options.skipInstall) {
-    await runProductInit(targetDir, product, options);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Step 8: Product-specific optional wizards
-  // ─────────────────────────────────────────────────────────────────────────
-
-  if (interactive && product === "conductor") {
+  if (interactive && allSucceeded && product === "conductor") {
+    log.newline();
     await conductorOptionalSetup(targetDir, pm);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 9: Success!
+  // Step 8: Success! (only if everything succeeded)
   // ─────────────────────────────────────────────────────────────────────────
 
   log.newline();
-  log.success(`${colors.bold(projectName)} is ready!`);
-  log.newline();
 
+  if (allSucceeded) {
+    // Show success box
+    console.log(successBox(`${projectName} created successfully!`));
+  } else {
+    // Show partial success
+    log.warn(`${projectName} created with warnings`);
+  }
+
+  log.newline();
   log.plain(colors.bold("Next steps:"));
   log.newline();
-  console.log(`  ${colors.dim("1.")} cd ${projectName}`);
-  if (options.skipInstall) {
-    console.log(`  ${colors.dim("2.")} ${pm} install`);
-    console.log(`  ${colors.dim("3.")} ${pm} run dev`);
-  } else {
-    console.log(`  ${colors.dim("2.")} ${pm} run dev`);
+  console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+  if (options.skipInstall || !allSucceeded) {
+    console.log(`  ${colors.accent(`${pm} install`)}`);
   }
+  console.log(`  ${colors.accent(`${pm} run dev`)}`);
   log.newline();
 
-  log.dim(`Docs: https://docs.ensemble.ai/${product}`);
+  if (product === "conductor") {
+    console.log(`Then visit: ${colors.accent("http://localhost:8787/")}`);
+    log.newline();
+  }
+
+  log.dim(`📚 Docs: https://docs.ensemble.ai/${product}`);
   log.newline();
 }
 
@@ -398,10 +616,8 @@ export async function initWizard(
 
 async function conductorOptionalSetup(
   targetDir: string,
-  pm: PackageManager,
+  _pm: PackageManager,
 ): Promise<void> {
-  log.newline();
-
   // Cloudflare auth
   const setupCloudflare = await promptConfirm(
     "Configure Cloudflare authentication?",
@@ -423,32 +639,36 @@ async function conductorOptionalSetup(
     }
   }
 
+  log.newline();
+
   // AI Provider
   const setupAI = await promptConfirm("Configure AI provider?", true);
 
   if (setupAI) {
     const provider = await promptSelect("Select AI provider:", [
-      { title: "Cloudflare Workers AI (free tier)", value: "cloudflare" },
+      { title: "Cloudflare Workers AI (no API key needed)", value: "cloudflare" },
       { title: "OpenAI", value: "openai" },
       { title: "Anthropic", value: "anthropic" },
       { title: "Groq", value: "groq" },
       { title: "Skip for now", value: "skip" },
     ]);
 
-    if (provider !== "skip" && provider !== "cloudflare") {
-      // TODO: prompt for API key and store via wrangler secret
+    if (provider === "cloudflare") {
+      log.success("Using Cloudflare Workers AI");
+    } else if (provider !== "skip") {
       log.dim(`Configure ${provider} API key in .dev.vars or wrangler secret`);
     }
   }
 
+  log.newline();
+
   // Cloud connection
-  const setupCloud = await promptConfirm(
-    "Connect to Ensemble Cloud?",
-    false, // Default no
-  );
+  const setupCloud = await promptConfirm("Connect to Ensemble Cloud?", false);
 
   if (setupCloud) {
-    log.dim("Cloud connection coming soon...");
+    log.dim("Run 'ensemble cloud init' to configure cloud connection");
+  } else {
+    log.info("No problem! Connect anytime: ensemble cloud init");
   }
 }
 
@@ -457,49 +677,8 @@ async function conductorOptionalSetup(
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function checkWranglerAuth(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn("wrangler", ["whoami"], {
-      stdio: "pipe",
-      shell: true,
-    });
-
-    let output = "";
-    child.stdout?.on("data", (data) => {
-      output += data.toString();
-    });
-
-    child.on("close", (code) => {
-      resolve(code === 0 && !output.includes("Not logged in"));
-    });
-
-    child.on("error", () => {
-      resolve(false);
-    });
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Product Banner Display
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Show the product-specific ASCII art banner after selection
- */
-function showProductBanner(product: Product): void {
-  switch (product) {
-    case "conductor":
-      banners.conductor();
-      break;
-    case "edgit":
-      banners.edgit();
-      break;
-    case "cloud":
-      banners.cloud();
-      break;
-    case "chamber":
-      banners.chamber();
-      break;
-  }
+  const result = await runCommandSilent("wrangler", ["whoami"]);
+  return result.success && !result.stdout.includes("Not logged in");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

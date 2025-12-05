@@ -82,6 +82,9 @@ vi.mock("../ui/index.js", () => ({
   promptPassword: vi.fn().mockResolvedValue(""),
   isInteractive: vi.fn().mockReturnValue(false),
   isCI: vi.fn().mockReturnValue(true),
+  successBox: vi.fn((msg: string) => `[SUCCESS BOX: ${msg}]`),
+  showNestedSuccess: vi.fn(),
+  showNestedAction: vi.fn(),
 }));
 
 import {
