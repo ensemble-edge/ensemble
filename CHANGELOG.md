@@ -1,5 +1,19 @@
 # @ensemble-edge/ensemble
 
+## 0.1.5
+
+### Patch Changes
+
+- 65128e5: CLI improvements and documentation updates:
+  - Add integrated init wizard with project type selection (Conductor/Edgit)
+  - Add interactive prompts for package manager selection
+  - Auto-detect package manager from lockfiles
+  - Auto-install dependencies after project initialization
+  - Update README with Cloudflare-native positioning
+  - Standardize CLI patterns to use npx @ensemble-edge/ensemble
+  - Remove deprecated conductor command (now uses @ensemble-edge/conductor)
+  - Remove bundled templates (now pulled from @ensemble-edge/conductor)
+
 ## 0.1.4
 
 ### Patch Changes
