@@ -1,5 +1,11 @@
 # @ensemble-edge/ensemble
 
+## 0.1.3
+
+### Patch Changes
+
+- 01480b6: Documentation updates: remove login/config commands, add conductor init options
+
 ## 0.1.2
 
 ### Patch Changes
