@@ -20,10 +20,7 @@ vi.mock("../ui/index.js", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import {
-  detectInstalledProducts,
-  getSuggestedProducts,
-} from "../discovery.js";
+import { detectInstalledProducts, getSuggestedProducts } from "../discovery.js";
 
 describe("discovery", () => {
   beforeEach(() => {

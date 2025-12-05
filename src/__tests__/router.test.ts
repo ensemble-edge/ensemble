@@ -248,13 +248,7 @@ describe("router", () => {
       await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
       // Verifies args are passed correctly to edgit's runCLI
       expect(runEdgitCLI).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          "edgit",
-          "tag",
-          "create",
-          "prompt",
-          "v1.0.0",
-        ]),
+        expect.arrayContaining(["edgit", "tag", "create", "prompt", "v1.0.0"]),
       );
     });
 
@@ -289,7 +283,11 @@ describe("router", () => {
     it("should not spawn subprocess for edgit", async () => {
       await route(["edgit", "status"]);
       // Spawn should NOT be called for edgit - we use direct import
-      expect(spawn).not.toHaveBeenCalledWith("edgit", expect.anything(), expect.anything());
+      expect(spawn).not.toHaveBeenCalledWith(
+        "edgit",
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 

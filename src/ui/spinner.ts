@@ -17,6 +17,7 @@ export interface Spinner {
   stop: () => Spinner;
   success: (options?: { text?: string }) => Spinner;
   error: (options?: { text?: string }) => Spinner;
+  warn: (options?: { text?: string }) => Spinner;
   update: (text: string) => Spinner;
 }
 
@@ -72,6 +73,13 @@ export function createSpinner(text: string): Spinner {
       this.stop();
       const finalText = options?.text ?? currentText;
       stream.write(`${colors.error(statusIcons.error)} ${finalText}\n`);
+      return this;
+    },
+
+    warn(options?: { text?: string }) {
+      this.stop();
+      const finalText = options?.text ?? currentText;
+      stream.write(`${colors.warning(statusIcons.warning)} ${finalText}\n`);
       return this;
     },
 

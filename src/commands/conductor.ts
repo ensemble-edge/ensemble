@@ -373,8 +373,14 @@ export async function conductorInit(args: string[]): Promise<void> {
   // Step: Check Wrangler Authentication (if not skipped)
   if (needsAuth) {
     currentStep++;
-    console.log(colors.dim(`Step ${currentStep} of ${totalSteps}: Cloudflare Authentication`));
-    const authSpinner = createSpinner("Checking wrangler authentication...").start();
+    console.log(
+      colors.dim(
+        `Step ${currentStep} of ${totalSteps}: Cloudflare Authentication`,
+      ),
+    );
+    const authSpinner = createSpinner(
+      "Checking wrangler authentication...",
+    ).start();
 
     const authStatus = await checkWranglerAuth();
 
@@ -385,11 +391,16 @@ export async function conductorInit(args: string[]): Promise<void> {
     } else {
       authSpinner.warn({ text: "Not authenticated with Cloudflare" });
       console.log("");
-      log.info("Conductor deploys to Cloudflare Workers. Would you like to login?");
+      log.info(
+        "Conductor deploys to Cloudflare Workers. Would you like to login?",
+      );
       console.log("");
 
       const answer = await readLine(colors.accent("  Login now? [Y/n]: "));
-      const shouldLogin = !answer || answer.toLowerCase() === "y" || answer.toLowerCase() === "yes";
+      const shouldLogin =
+        !answer ||
+        answer.toLowerCase() === "y" ||
+        answer.toLowerCase() === "yes";
 
       if (shouldLogin) {
         console.log("");
@@ -403,7 +414,9 @@ export async function conductorInit(args: string[]): Promise<void> {
           log.warn("Login skipped. You can run 'wrangler login' later.");
         }
       } else {
-        log.dim("Skipping authentication. Run 'wrangler login' before deploying.");
+        log.dim(
+          "Skipping authentication. Run 'wrangler login' before deploying.",
+        );
       }
     }
     console.log("");
@@ -411,7 +424,9 @@ export async function conductorInit(args: string[]): Promise<void> {
 
   // Step: Validate target directory
   currentStep++;
-  console.log(colors.dim(`Step ${currentStep} of ${totalSteps}: Validate Target`));
+  console.log(
+    colors.dim(`Step ${currentStep} of ${totalSteps}: Validate Target`),
+  );
   const spinner1 = createSpinner("Checking target directory...").start();
 
   // Check if it's already a Conductor project
@@ -436,7 +451,9 @@ export async function conductorInit(args: string[]): Promise<void> {
   // Step: Find template
   currentStep++;
   console.log("");
-  console.log(colors.dim(`Step ${currentStep} of ${totalSteps}: Locate Template`));
+  console.log(
+    colors.dim(`Step ${currentStep} of ${totalSteps}: Locate Template`),
+  );
   const spinner2 = createSpinner("Finding Conductor templates...").start();
 
   const conductorRoot = await findConductorPackage();
@@ -484,7 +501,9 @@ export async function conductorInit(args: string[]): Promise<void> {
   // Step: Copy files
   currentStep++;
   console.log("");
-  console.log(colors.dim(`Step ${currentStep} of ${totalSteps}: Create Project`));
+  console.log(
+    colors.dim(`Step ${currentStep} of ${totalSteps}: Create Project`),
+  );
   const spinner3 = createSpinner("Copying template files...").start();
 
   let filesCreated = 0;
@@ -519,14 +538,18 @@ export async function conductorInit(args: string[]): Promise<void> {
   if (needsSecrets) {
     currentStep++;
     console.log("");
-    console.log(colors.dim(`Step ${currentStep} of ${totalSteps}: AI Provider Setup`));
+    console.log(
+      colors.dim(`Step ${currentStep} of ${totalSteps}: AI Provider Setup`),
+    );
     console.log("");
     log.info("Configure an AI provider for your agents.");
     console.log("");
 
     // Show provider options
     console.log(colors.bold("  Available providers:"));
-    console.log("    1. Anthropic (Claude) - Recommended for complex reasoning");
+    console.log(
+      "    1. Anthropic (Claude) - Recommended for complex reasoning",
+    );
     console.log("    2. OpenAI (GPT-4) - Broad capability model");
     console.log("    3. Cloudflare Workers AI - Zero configuration, built-in");
     console.log("    4. Skip for now");
@@ -537,9 +560,13 @@ export async function conductorInit(args: string[]): Promise<void> {
 
     if (options.provider && options.provider in AI_PROVIDERS) {
       selectedProvider = options.provider as AIProviderKey;
-      log.dim(`Using provider from --provider flag: ${AI_PROVIDERS[selectedProvider].name}`);
+      log.dim(
+        `Using provider from --provider flag: ${AI_PROVIDERS[selectedProvider].name}`,
+      );
     } else {
-      const providerChoice = await readLine(colors.accent("  Select provider [1-4]: "));
+      const providerChoice = await readLine(
+        colors.accent("  Select provider [1-4]: "),
+      );
 
       switch (providerChoice) {
         case "1":
@@ -565,18 +592,25 @@ export async function conductorInit(args: string[]): Promise<void> {
         log.info(`Get your ${provider.name} API key at: ${provider.docsUrl}`);
         console.log("");
 
-        const apiKey = await readLine(colors.accent(`  ${provider.secretName}: `));
+        const apiKey = await readLine(
+          colors.accent(`  ${provider.secretName}: `),
+        );
 
         if (apiKey && apiKey.trim()) {
           // Validate key format (basic check)
-          const keyValid = !provider.keyFormat || apiKey.startsWith(provider.keyFormat);
+          const keyValid =
+            !provider.keyFormat || apiKey.startsWith(provider.keyFormat);
 
           if (!keyValid) {
-            log.warn(`Key doesn't start with expected prefix (${provider.keyFormat})`);
+            log.warn(
+              `Key doesn't start with expected prefix (${provider.keyFormat})`,
+            );
           }
 
           // Store the secret
-          const secretSpinner = createSpinner(`Storing ${provider.secretName}...`).start();
+          const secretSpinner = createSpinner(
+            `Storing ${provider.secretName}...`,
+          ).start();
 
           // Note: wrangler secret requires being in a project directory with wrangler.toml
           // For new projects, we'll need to store it after npm install
@@ -587,14 +621,16 @@ export async function conductorInit(args: string[]): Promise<void> {
 
           log.dim("  The secret will be stored securely in Cloudflare.");
         } else {
-          log.dim(`Skipped. Set up later with: wrangler secret put ${provider.secretName}`);
+          log.dim(
+            `Skipped. Set up later with: wrangler secret put ${provider.secretName}`,
+          );
         }
       } else {
         // Cloudflare Workers AI - no key needed
         log.success("Cloudflare Workers AI is ready to use!");
         log.dim("  No API key required - uses Workers AI binding.");
         log.dim("  Make sure your wrangler.toml includes: [ai]");
-        log.dim("  binding = \"AI\"");
+        log.dim('  binding = "AI"');
       }
     } else {
       log.dim("Skipped AI setup. Configure later with 'wrangler secret put'.");
@@ -698,7 +734,9 @@ export function showConductorHelp(): void {
   console.log("  --no-examples       Skip example files");
   console.log("  --skip-auth         Skip Cloudflare authentication check");
   console.log("  --skip-secrets      Skip AI provider setup");
-  console.log("  --provider <name>   AI provider (anthropic, openai, cloudflare)");
+  console.log(
+    "  --provider <name>   AI provider (anthropic, openai, cloudflare)",
+  );
   console.log("");
   console.log(colors.bold("Examples:"));
   console.log(colors.accent("  ensemble conductor init my-project"));

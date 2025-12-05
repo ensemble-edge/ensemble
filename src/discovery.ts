@@ -90,16 +90,15 @@ export function showProductHint(currentProduct: string): void {
   if (suggestions.length === 0) return;
 
   // Pick one suggestion randomly to keep hints varied
-  const suggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+  const suggestion =
+    suggestions[Math.floor(Math.random() * suggestions.length)];
   if (!suggestion) return;
 
   const description = PRODUCT_DESCRIPTIONS[suggestion];
   if (!description) return;
 
   console.log("");
-  console.log(
-    colors.dim("─".repeat(50)),
-  );
+  console.log(colors.dim("─".repeat(50)));
   console.log(
     colors.dim("💡 Tip:"),
     colors.accent(`ensemble ${suggestion}`),
