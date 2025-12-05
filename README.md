@@ -44,13 +44,6 @@ ensemble edgit tag create prompt v1.0.0
 | `ensemble chamber` | Edge data layer (coming soon) |
 | `ensemble cloud` | Managed platform connection |
 
-### Global Commands
-
-| Command | Description |
-|---------|-------------|
-| `ensemble login` | Authenticate with Ensemble |
-| `ensemble config` | CLI configuration |
-
 ### Options
 
 | Flag | Description |
@@ -69,6 +62,12 @@ ensemble conductor --help
 # Initialize a new project
 ensemble conductor init [name]
 
+# Initialize with AI provider pre-selected
+ensemble conductor init my-project --provider anthropic
+
+# CI/CD mode (skip interactive prompts)
+ensemble conductor init my-project --skip-auth --skip-secrets
+
 # Start development server (wrangler passthrough)
 ensemble conductor dev
 
@@ -81,6 +80,15 @@ ensemble conductor validate
 # Manage API keys
 ensemble conductor keys
 ```
+
+### Init Options
+
+| Flag | Description |
+|------|-------------|
+| `--skip-auth` | Skip Wrangler authentication check |
+| `--skip-secrets` | Skip AI provider setup |
+| `--provider <name>` | Pre-select AI provider (anthropic, openai, cloudflare) |
+| `--template <name>` | Use a starter template |
 
 ## Edgit Commands
 
@@ -180,8 +188,7 @@ ensemble <command> [args]
     ├── cloud      → Managed platform
     │   └── init, status, rotate, disable
     │
-    ├── login      → Authentication
-    ├── config     → CLI configuration
+    ├── wrangler   → Cloudflare Workers CLI (explicit passthrough)
     │
     └── *          → Wrangler passthrough (dev, deploy, tail, etc.)
 ```
