@@ -1,5 +1,15 @@
 # @ensemble-edge/ensemble
 
+## 0.1.4
+
+### Patch Changes
+
+- dd1d37d: Add bundled conductor templates and simplify init command
+  - Bundle conductor project templates in ensemble CLI package
+  - Simplify conductor init to use bundled templates instead of npm pack
+  - Add conductor templates directory with project scaffolding
+  - Fix cloud command handler path
+
 ## 0.1.3
 
 ### Patch Changes
