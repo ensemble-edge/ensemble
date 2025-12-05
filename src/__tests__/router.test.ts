@@ -159,14 +159,19 @@ describe("router", () => {
       );
     });
 
-    it("should show coming soon for chamber init", async () => {
+    it("should show chamber banner for chamber init", async () => {
       await route(["chamber", "init"]);
-      expect(log.warn).toHaveBeenCalledWith("Chamber is coming soon!");
+      expect(banners.chamber).toHaveBeenCalled();
     });
 
-    it("should show coming soon for cloud init", async () => {
+    it("should run cloud init wizard", async () => {
       await route(["cloud", "init"]);
-      expect(log.warn).toHaveBeenCalledWith("Cloud init is coming soon!");
+
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("package.json"),
+        expect.stringContaining("@ensemble-edge/cloud"),
+      );
     });
   });
 
@@ -244,14 +249,14 @@ describe("router", () => {
   });
 
   describe("chamber commands", () => {
-    it("should show help with no args", async () => {
+    it("should show coming soon info with no args", async () => {
       await route(["chamber"]);
       expect(banners.chamber).toHaveBeenCalled();
     });
 
-    it("should show coming soon for subcommands", async () => {
+    it("should show coming soon info for any subcommand", async () => {
       await route(["chamber", "status"]);
-      expect(log.warn).toHaveBeenCalledWith("Chamber commands coming soon...");
+      expect(banners.chamber).toHaveBeenCalled();
     });
   });
 });

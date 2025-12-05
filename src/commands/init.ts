@@ -68,7 +68,7 @@ const PRODUCTS: Record<
   },
   chamber: {
     name: "Chamber",
-    description: "Edge data layer",
+    description: "Edge data lake",
     package: "@ensemble-edge/chamber",
     available: false,
   },
@@ -76,7 +76,7 @@ const PRODUCTS: Record<
     name: "Ensemble Cloud",
     description: "Managed platform",
     package: "@ensemble-edge/cloud",
-    available: false,
+    available: true,
   },
 };
 
@@ -260,14 +260,14 @@ export async function initWizard(
         value: key as Product,
       }));
 
-    // Add coming soon items
+    // Add coming soon items (keep their actual value for specific messaging)
     const comingSoon = Object.entries(PRODUCTS)
       .filter(([_, config]) => !config.available)
-      .map(([_, config]) => ({
+      .map(([key, config]) => ({
         title: colors.dim(
           `${config.name} - ${config.description} (coming soon)`,
         ),
-        value: "disabled" as Product,
+        value: key as Product,
         disabled: true,
       }));
 
@@ -276,10 +276,19 @@ export async function initWizard(
       ...comingSoon,
     ]);
 
-    if (product === ("disabled" as Product)) {
-      log.warn("That product is coming soon!");
+    // Handle coming soon products with specific messaging
+    if (!PRODUCTS[product].available) {
+      if (product === "chamber") {
+        showChamberComingSoon();
+      } else {
+        log.warn("That product is coming soon!");
+      }
       return;
     }
+
+    // Show product-specific banner after selection
+    log.newline();
+    showProductBanner(product);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -470,6 +479,62 @@ async function checkWranglerAuth(): Promise<boolean> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Product Banner Display
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Show the product-specific ASCII art banner after selection
+ */
+function showProductBanner(product: Product): void {
+  switch (product) {
+    case "conductor":
+      banners.conductor();
+      break;
+    case "edgit":
+      banners.edgit();
+      break;
+    case "cloud":
+      banners.cloud();
+      break;
+    case "chamber":
+      banners.chamber();
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coming Soon Product Displays
+// ─────────────────────────────────────────────────────────────────────────────
+
+function showChamberComingSoon(): void {
+  banners.chamber();
+  console.log(`${colors.bold("Edge Data Lake")} ${colors.dim("(coming soon)")}
+
+Chamber is a KV-first distributed database that uses edge cache as
+an accelerator. It provides durability by default while delivering
+sub-millisecond read performance globally.
+
+${colors.dim("┌─────────────────────────────────────────────────────────────┐")}
+${colors.dim("│")} Edge cache as PRIMARY storage, not just a cache layer.       ${colors.dim("│")}
+${colors.dim("│")} A memory-first distributed database that happens to have    ${colors.dim("│")}
+${colors.dim("│")} persistence, not a persistent database with caching.        ${colors.dim("│")}
+${colors.dim("└─────────────────────────────────────────────────────────────┘")}
+
+Built as a specialized configuration of Conductor, Chamber treats data
+as a living organism that spreads naturally across Cloudflare's 300+
+edge locations based on access patterns.
+
+${colors.bold("Planned Features:")}
+  • Sub-millisecond reads at 300+ global locations
+  • Automatic data replication based on access patterns
+  • KV-first with optional SQL semantics
+  • Built on Cloudflare KV, D1, and Durable Objects
+
+${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/chamber")}
+`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Exports for direct product init
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -481,11 +546,10 @@ export async function edgitInit(options: InitOptions = {}): Promise<void> {
   await initWizard("edgit", options);
 }
 
-export async function chamberInit(options: InitOptions = {}): Promise<void> {
-  log.warn("Chamber is coming soon!");
+export async function chamberInit(_options: InitOptions = {}): Promise<void> {
+  showChamberComingSoon();
 }
 
 export async function cloudInit(options: InitOptions = {}): Promise<void> {
-  log.warn("Cloud init is coming soon!");
-  log.dim("For existing projects, use: ensemble cloud connect");
+  await initWizard("cloud", options);
 }

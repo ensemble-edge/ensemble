@@ -4,6 +4,59 @@
 
 import { colors, statusIcons, icons } from "./colors.js";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ASCII Art Banners
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ASCII_BANNERS = {
+  conductor: `
+   ______                __           __
+  / ____/___  ____  ____/ /_  _______/ /_____  _____
+ / /   / __ \\/ __ \\/ __  / / / / ___/ __/ __ \\/ ___/
+/ /___/ /_/ / / / / /_/ / /_/ / /__/ /_/ /_/ / /
+\\____/\\____/_/ /_/\\__,_/\\__,_/\\___/\\__/\\____/_/
+`,
+
+  edgit: `
+   ______    __      _ __
+  / ____/___/ /___ _(_) /_
+ / __/ / __  / __ \`/ / __/
+/ /___/ /_/ / /_/ / / /_
+\\____/\\__,_/\\__, /_/\\__/
+           /____/
+`,
+
+  cloud: `
+   ________                __
+  / ____/ /___  __  ______/ /
+ / /   / / __ \\/ / / / __  /
+/ /___/ / /_/ / /_/ / /_/ /
+\\____/_/\\____/\\__,_/\\__,_/
+`,
+
+  ensemble: `
+   ______                           __    __
+  / ____/___  ________  ____ ___  / /_  / /__
+ / __/ / __ \\/ ___/ _ \\/ __ \`__ \\/ __ \\/ / _ \\
+/ /___/ / / (__  )  __/ / / / / / /_/ / /  __/
+\\____/_/ /_/____/\\___/_/ /_/ /_/_.___/_/\\___/
+`,
+};
+
+/**
+ * Get terminal width (defaults to 80 if unavailable)
+ */
+function getTerminalWidth(): number {
+  return process.stdout.columns || 80;
+}
+
+/**
+ * Check if terminal is wide enough for ASCII art
+ */
+function useAsciiArt(): boolean {
+  return getTerminalWidth() >= 60;
+}
+
 /**
  * Log levels
  */
@@ -68,30 +121,52 @@ export const log = {
 
 /**
  * Product banners
+ *
+ * Uses ASCII art for wide terminals (>= 60 cols), falls back to simple
+ * emoji-based banners for narrow terminals.
  */
 export const banners = {
   ensemble: () => {
-    console.log("");
-    console.log(`  ${icons.ensemble} ${colors.primaryBold("Ensemble")}`);
-    console.log(colors.dim("  AI orchestration for Cloudflare Workers"));
-    console.log("");
+    if (useAsciiArt()) {
+      console.log(colors.primary(ASCII_BANNERS.ensemble));
+      console.log(colors.dim("by Ensemble"));
+      console.log("");
+    } else {
+      console.log("");
+      console.log(`  ${icons.ensemble} ${colors.primaryBold("Ensemble")}`);
+      console.log(colors.dim("  AI orchestration for Cloudflare Workers"));
+      console.log("");
+    }
   },
 
   conductor: () => {
-    console.log("");
-    console.log(`  ${icons.conductor} ${colors.primaryBold("Conductor")}`);
-    console.log(colors.dim("  Edge-native AI workflow orchestration"));
-    console.log("");
+    if (useAsciiArt()) {
+      console.log(colors.primary(ASCII_BANNERS.conductor));
+      console.log(colors.dim("by Ensemble"));
+      console.log("");
+    } else {
+      console.log("");
+      console.log(`  ${icons.conductor} ${colors.primaryBold("Conductor")}`);
+      console.log(colors.dim("  Edge-native AI workflow orchestration"));
+      console.log("");
+    }
   },
 
   edgit: () => {
-    console.log("");
-    console.log(`  ${icons.edgit} ${colors.primaryBold("Edgit")}`);
-    console.log(colors.dim("  Git-native versioning for AI components"));
-    console.log("");
+    if (useAsciiArt()) {
+      console.log(colors.primary(ASCII_BANNERS.edgit));
+      console.log(colors.dim("by Ensemble"));
+      console.log("");
+    } else {
+      console.log("");
+      console.log(`  ${icons.edgit} ${colors.primaryBold("Edgit")}`);
+      console.log(colors.dim("  Git-native versioning for AI components"));
+      console.log("");
+    }
   },
 
   chamber: () => {
+    // Chamber doesn't have ASCII art yet (coming soon product)
     console.log("");
     console.log(`  ${icons.chamber} ${colors.primaryBold("Chamber")}`);
     console.log(colors.dim("  The living edge database"));
@@ -99,10 +174,16 @@ export const banners = {
   },
 
   cloud: () => {
-    console.log("");
-    console.log(`  ${icons.cloud} ${colors.primaryBold("Ensemble Cloud")}`);
-    console.log(colors.dim("  Managed AI orchestration platform"));
-    console.log("");
+    if (useAsciiArt()) {
+      console.log(colors.primary(ASCII_BANNERS.cloud));
+      console.log(colors.dim("by Ensemble"));
+      console.log("");
+    } else {
+      console.log("");
+      console.log(`  ${icons.cloud} ${colors.primaryBold("Ensemble Cloud")}`);
+      console.log(colors.dim("  Managed AI orchestration platform"));
+      console.log("");
+    }
   },
 };
 
@@ -124,4 +205,18 @@ export function printUrl(label: string, url: string): void {
   console.log(
     `${colors.dim(label + ":")} ${colors.underline(colors.accent(url))}`,
   );
+}
+
+/**
+ * Show nested success item (indented with checkmark)
+ */
+export function showNestedSuccess(message: string): void {
+  console.log(`   ${colors.success("✓")} ${message}`);
+}
+
+/**
+ * Show nested action item (indented, dim)
+ */
+export function showNestedAction(message: string): void {
+  console.log(`   ${colors.dim(message)}`);
 }

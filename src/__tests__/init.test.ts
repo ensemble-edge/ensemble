@@ -165,18 +165,22 @@ describe("init wizard", () => {
   });
 
   describe("chamberInit", () => {
-    it("should show coming soon message", async () => {
+    it("should show chamber banner and vision", async () => {
       await chamberInit();
 
-      expect(log.warn).toHaveBeenCalledWith("Chamber is coming soon!");
+      expect(banners.chamber).toHaveBeenCalled();
     });
   });
 
   describe("cloudInit", () => {
-    it("should show coming soon message", async () => {
+    it("should create cloud project", async () => {
       await cloudInit();
 
-      expect(log.warn).toHaveBeenCalledWith("Cloud init is coming soon!");
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("package.json"),
+        expect.stringContaining("@ensemble-edge/cloud"),
+      );
     });
   });
 });

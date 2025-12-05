@@ -190,24 +190,32 @@ ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/edgit")}
 /**
  * Run chamber commands
  */
-async function runChamber(args: string[]): Promise<void> {
-  // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    banners.chamber();
-    console.log(colors.bold("Commands:"));
-    console.log("  init            Initialize Chamber in project");
-    console.log("  status          Show cache status");
-    console.log("");
-    console.log(colors.warning("Chamber is coming soon!"));
-    console.log("");
-    console.log(
-      colors.dim("Docs:"),
-      colors.underline("https://docs.ensemble.ai/chamber"),
-    );
-    return;
-  }
+async function runChamber(_args: string[]): Promise<void> {
+  banners.chamber();
+  console.log(`${colors.bold("Edge Data Lake")} ${colors.dim("(coming soon)")}
 
-  log.warn("Chamber commands coming soon...");
+Chamber is a KV-first distributed database that uses edge cache as
+an accelerator. It provides durability by default while delivering
+sub-millisecond read performance globally.
+
+${colors.dim("┌─────────────────────────────────────────────────────────────┐")}
+${colors.dim("│")} Edge cache as PRIMARY storage, not just a cache layer.       ${colors.dim("│")}
+${colors.dim("│")} A memory-first distributed database that happens to have    ${colors.dim("│")}
+${colors.dim("│")} persistence, not a persistent database with caching.        ${colors.dim("│")}
+${colors.dim("└─────────────────────────────────────────────────────────────┘")}
+
+Built as a specialized configuration of Conductor, Chamber treats data
+as a living organism that spreads naturally across Cloudflare's 300+
+edge locations based on access patterns.
+
+${colors.bold("Planned Features:")}
+  • Sub-millisecond reads at 300+ global locations
+  • Automatic data replication based on access patterns
+  • KV-first with optional SQL semantics
+  • Built on Cloudflare KV, D1, and Durable Objects
+
+${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/chamber")}
+`);
 }
 
 /**

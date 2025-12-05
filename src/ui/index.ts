@@ -49,7 +49,14 @@ export {
 } from "./box.js";
 
 // Logger
-export { log, banners, printCommand, printUrl } from "./logger.js";
+export {
+  log,
+  banners,
+  printCommand,
+  printUrl,
+  showNestedSuccess,
+  showNestedAction,
+} from "./logger.js";
 
 // Prompts
 export {

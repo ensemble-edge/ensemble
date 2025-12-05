@@ -24,7 +24,7 @@ function printHelp(): void {
 ${colors.bold("Products:")}
   conductor     Orchestrate AI workflows
   edgit         Version components
-  chamber       Edge data layer
+  chamber       Edge data lake ${colors.dim("(coming soon)")}
   cloud         Managed platform
 
 ${colors.bold("Options:")}
