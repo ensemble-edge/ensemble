@@ -265,15 +265,18 @@ async function createProjectStructure(
       await mkdir(resolve(targetDir, "queries"), { recursive: true });
       await mkdir(resolve(targetDir, "configs"), { recursive: true });
 
-      // Create wrangler.toml
+      // Create wrangler.toml (AI binding commented out by default so local dev works)
       await writeFile(
         resolve(targetDir, "wrangler.toml"),
         `name = "${projectName}"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-[ai]
-binding = "AI"
+# Uncomment to enable Cloudflare Workers AI
+# Run: ensemble conductor init --configure-ai
+# Or manually uncomment after running: wrangler login
+# [ai]
+# binding = "AI"
 `,
       );
       files.push("wrangler.toml");
@@ -312,7 +315,8 @@ binding = "AI"
 };
 
 interface Env {
-  AI: Ai;
+  // Uncomment when AI binding is enabled in wrangler.toml
+  // AI: Ai;
 }
 `,
       );
@@ -654,7 +658,9 @@ async function conductorOptionalSetup(
     ]);
 
     if (provider === "cloudflare") {
-      log.success("Using Cloudflare Workers AI");
+      // Enable AI binding in wrangler.toml and index.ts
+      await enableCloudflareAI(targetDir);
+      log.success("Enabled Cloudflare Workers AI");
     } else if (provider !== "skip") {
       log.dim(`Configure ${provider} API key in .dev.vars or wrangler secret`);
     }
@@ -679,6 +685,39 @@ async function conductorOptionalSetup(
 async function checkWranglerAuth(): Promise<boolean> {
   const result = await runCommandSilent("wrangler", ["whoami"]);
   return result.success && !result.stdout.includes("Not logged in");
+}
+
+/**
+ * Enable Cloudflare Workers AI by uncommenting the AI binding in wrangler.toml and index.ts
+ */
+async function enableCloudflareAI(targetDir: string): Promise<void> {
+  // Update wrangler.toml - uncomment AI binding
+  const wranglerPath = resolve(targetDir, "wrangler.toml");
+  try {
+    let wranglerContent = await readFile(wranglerPath, "utf-8");
+    wranglerContent = wranglerContent
+      .replace(
+        "# Uncomment to enable Cloudflare Workers AI\n# Run: ensemble conductor init --configure-ai\n# Or manually uncomment after running: wrangler login\n# [ai]\n# binding = \"AI\"",
+        "[ai]\nbinding = \"AI\"",
+      );
+    await writeFile(wranglerPath, wranglerContent);
+  } catch {
+    // File might not exist or have different format, skip
+  }
+
+  // Update index.ts - uncomment AI type
+  const indexPath = resolve(targetDir, "src/index.ts");
+  try {
+    let indexContent = await readFile(indexPath, "utf-8");
+    indexContent = indexContent
+      .replace(
+        "// Uncomment when AI binding is enabled in wrangler.toml\n  // AI: Ai;",
+        "AI: Ai;",
+      );
+    await writeFile(indexPath, indexContent);
+  } catch {
+    // File might not exist or have different format, skip
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
