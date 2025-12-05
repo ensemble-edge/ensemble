@@ -9,6 +9,9 @@
 
 import { spawn } from "node:child_process";
 import { colors, log, banners } from "./ui/index.js";
+import { routeCloudCommand } from "./commands/cloud.js";
+import { routeConductorCommand } from "./commands/conductor.js";
+import { runCLI as runEdgitCLI } from "@ensemble-edge/edgit/cli";
 
 /**
  * Ensemble products - handled internally or via subprocess
@@ -100,94 +103,25 @@ async function routeGlobal(cmd: EnsembleGlobal, args: string[]): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Run conductor commands
+ * Run conductor commands - delegates to conductor module
  */
 async function runConductor(args: string[]): Promise<void> {
-  // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    banners.conductor();
-    console.log(colors.bold("Commands:"));
-    console.log("  init [name]     Initialize a new Conductor project");
-    console.log("  dev             Start development server (wrangler dev)");
-    console.log("  deploy          Deploy to production (wrangler deploy)");
-    console.log("  validate        Validate project configuration");
-    console.log("  keys            Manage API keys");
-    console.log("");
-    console.log(colors.bold("Examples:"));
-    console.log(colors.accent("  ensemble conductor init my-project"));
-    console.log(colors.accent("  ensemble conductor dev"));
-    console.log("");
-    console.log(
-      colors.dim("Docs:"),
-      colors.underline("https://docs.ensemble.ai/conductor"),
-    );
-    return;
-  }
-
-  const [subCmd, ...subArgs] = args;
-
-  switch (subCmd) {
-    case "init":
-      // TODO: Implement conductor init
-      log.warn("conductor init coming soon...");
-      log.dim("For now, use: npx @ensemble-edge/conductor init");
-      break;
-    case "dev":
-      // Passthrough to wrangler dev
-      await runWrangler("dev", subArgs);
-      break;
-    case "deploy":
-      // Passthrough to wrangler deploy
-      await runWrangler("deploy", subArgs);
-      break;
-    case "validate":
-      log.warn("conductor validate coming soon...");
-      break;
-    case "keys":
-      log.warn("conductor keys coming soon...");
-      break;
-    default:
-      // Try to passthrough to conductor CLI
-      await spawnCommand("conductor", args, {
-        notFoundMessage:
-          "Conductor CLI not found.\nInstall: npm install -g @ensemble-edge/conductor",
-      });
-  }
+  await routeConductorCommand(args);
 }
 
 /**
  * Run edgit commands
+ *
+ * Strategy: Hybrid - Direct import of edgit CLI
+ * - Edgit exports runCLI() from @ensemble-edge/edgit/cli
+ * - No subprocess overhead, shared process context
+ * - Uses edgit's own help formatting and command routing
  */
 async function runEdgit(args: string[]): Promise<void> {
-  // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    banners.edgit();
-    console.log(colors.bold("Commands:"));
-    console.log("  init            Initialize edgit in current repo");
-    console.log("  tag             Create and manage version tags");
-    console.log("  components      Manage tracked components");
-    console.log("  deploy          Manage deployments");
-    console.log("  history         View version history");
-    console.log("");
-    console.log(colors.bold("Git Passthrough:"));
-    console.log("  All git commands work directly (commit, push, pull, etc.)");
-    console.log("");
-    console.log(colors.bold("Examples:"));
-    console.log(colors.accent("  ensemble edgit init"));
-    console.log(colors.accent("  ensemble edgit tag create prompt v1.0.0"));
-    console.log(colors.accent("  ensemble edgit deploy set prompt prod"));
-    console.log("");
-    console.log(
-      colors.dim("Docs:"),
-      colors.underline("https://docs.ensemble.ai/edgit"),
-    );
-    return;
-  }
-
-  // Passthrough to edgit CLI
-  await spawnCommand("edgit", args, {
-    notFoundMessage: "Edgit CLI not found.\nInstall: npm install -g edgit",
-  });
+  // Build argv array that edgit's main() expects
+  // Format: [node, script, ...args]
+  const argv = [process.argv[0] ?? "node", "edgit", ...args];
+  await runEdgitCLI(argv);
 }
 
 /**
@@ -214,50 +148,10 @@ async function runChamber(args: string[]): Promise<void> {
 }
 
 /**
- * Run cloud commands
+ * Run cloud commands - delegates to cloud module
  */
 async function runCloud(args: string[]): Promise<void> {
-  // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    banners.cloud();
-    console.log(colors.bold("Commands:"));
-    console.log("  init            Initialize cloud connection");
-    console.log("  status          Show connection status");
-    console.log("  rotate          Rotate cloud key");
-    console.log("  disable         Disable cloud connection");
-    console.log("");
-    console.log(colors.bold("Examples:"));
-    console.log(colors.accent("  ensemble cloud init"));
-    console.log(colors.accent("  ensemble cloud status"));
-    console.log(colors.accent("  ensemble cloud init --env staging"));
-    console.log("");
-    console.log(
-      colors.dim("Docs:"),
-      colors.underline("https://docs.ensemble.ai/cloud"),
-    );
-    return;
-  }
-
-  const [subCmd, ...subArgs] = args;
-
-  switch (subCmd) {
-    case "init":
-      // TODO: Implement cloud init
-      log.warn("cloud init coming soon...");
-      break;
-    case "status":
-      log.warn("cloud status coming soon...");
-      break;
-    case "rotate":
-      log.warn("cloud rotate coming soon...");
-      break;
-    case "disable":
-      log.warn("cloud disable coming soon...");
-      break;
-    default:
-      log.error(`Unknown cloud command: ${subCmd}`);
-      log.dim("Run `ensemble cloud --help` for available commands.");
-  }
+  await routeCloudCommand(args);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

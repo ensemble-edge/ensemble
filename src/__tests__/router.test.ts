@@ -12,6 +12,26 @@ vi.mock("node:child_process", () => ({
   })),
 }));
 
+// Mock fs modules for conductor commands
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(() => false),
+}));
+
+vi.mock("node:fs/promises", () => ({
+  readFile: vi.fn(() => Promise.resolve("")),
+  writeFile: vi.fn(() => Promise.resolve()),
+  mkdir: vi.fn(() => Promise.resolve()),
+  readdir: vi.fn(() => Promise.resolve([])),
+  stat: vi.fn(() => Promise.resolve({ isDirectory: () => false })),
+  copyFile: vi.fn(() => Promise.resolve()),
+}));
+
+// Mock edgit CLI - hybrid integration (direct import, not subprocess)
+// Note: vi.mock is hoisted, so we can't use external variables
+vi.mock("@ensemble-edge/edgit/cli", () => ({
+  runCLI: vi.fn(() => Promise.resolve()),
+}));
+
 // Mock UI module to prevent console output during tests
 vi.mock("../ui/index.js", () => ({
   colors: {
@@ -37,11 +57,18 @@ vi.mock("../ui/index.js", () => ({
     chamber: vi.fn(),
     cloud: vi.fn(),
   },
+  createSpinner: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    success: vi.fn().mockReturnThis(),
+    error: vi.fn().mockReturnThis(),
+  })),
+  successBox: vi.fn((title, content) => `${title}\n${content}`),
 }));
 
 import { route } from "../router.js";
 import { spawn } from "node:child_process";
 import { log, banners } from "../ui/index.js";
+import { runCLI as runEdgitCLI } from "@ensemble-edge/edgit/cli";
 
 describe("router", () => {
   beforeEach(() => {
@@ -68,7 +95,10 @@ describe("router", () => {
 
     it("should route edgit commands", async () => {
       await route(["edgit", "--help"]);
-      expect(banners.edgit).toHaveBeenCalled();
+      // Edgit uses hybrid integration - calls runCLI directly
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining(["edgit", "--help"]),
+      );
     });
 
     it("should route chamber commands", async () => {
@@ -121,9 +151,10 @@ describe("router", () => {
       expect(banners.conductor).toHaveBeenCalled();
     });
 
-    it("should handle conductor init (coming soon)", async () => {
+    it("should handle conductor init (requires conductor package)", async () => {
       await route(["conductor", "init"]);
-      expect(log.warn).toHaveBeenCalledWith("conductor init coming soon...");
+      // Without conductor package installed, shows info message
+      expect(log.info).toHaveBeenCalledWith("Install Conductor first:");
     });
 
     it("should passthrough conductor dev to wrangler", async () => {
@@ -144,16 +175,17 @@ describe("router", () => {
       );
     });
 
-    it("should handle conductor validate (coming soon)", async () => {
+    it("should handle conductor validate (requires conductor project)", async () => {
       await route(["conductor", "validate"]);
-      expect(log.warn).toHaveBeenCalledWith(
-        "conductor validate coming soon...",
-      );
+      // Not in a conductor project
+      expect(log.error).toHaveBeenCalledWith("Not a Conductor project.");
     });
 
-    it("should handle conductor keys (coming soon)", async () => {
+    it("should handle conductor keys", async () => {
       await route(["conductor", "keys"]);
-      expect(log.warn).toHaveBeenCalledWith("conductor keys coming soon...");
+      expect(log.warn).toHaveBeenCalledWith(
+        "Key management via ensemble CLI coming soon...",
+      );
     });
   });
 
@@ -163,24 +195,38 @@ describe("router", () => {
       expect(banners.cloud).toHaveBeenCalled();
     });
 
-    it("should handle cloud init (coming soon)", async () => {
+    it("should show help with -h flag", async () => {
+      await route(["cloud", "-h"]);
+      expect(banners.cloud).toHaveBeenCalled();
+    });
+
+    it("should show help with --help flag", async () => {
+      await route(["cloud", "--help"]);
+      expect(banners.cloud).toHaveBeenCalled();
+    });
+
+    it("should handle cloud init (requires wrangler.toml)", async () => {
       await route(["cloud", "init"]);
-      expect(log.warn).toHaveBeenCalledWith("cloud init coming soon...");
+      // Without wrangler.toml, shows error
+      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
     });
 
-    it("should handle cloud status (coming soon)", async () => {
+    it("should handle cloud status (requires wrangler.toml)", async () => {
       await route(["cloud", "status"]);
-      expect(log.warn).toHaveBeenCalledWith("cloud status coming soon...");
+      // Without wrangler.toml, shows error
+      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
     });
 
-    it("should handle cloud rotate (coming soon)", async () => {
+    it("should handle cloud rotate (requires confirmation)", async () => {
       await route(["cloud", "rotate"]);
-      expect(log.warn).toHaveBeenCalledWith("cloud rotate coming soon...");
+      // Without wrangler.toml, shows error
+      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
     });
 
-    it("should handle cloud disable (coming soon)", async () => {
+    it("should handle cloud disable (requires confirmation)", async () => {
       await route(["cloud", "disable"]);
-      expect(log.warn).toHaveBeenCalledWith("cloud disable coming soon...");
+      // Without wrangler.toml, shows error
+      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
     });
 
     it("should handle unknown cloud subcommand", async () => {
@@ -189,19 +235,61 @@ describe("router", () => {
     });
   });
 
-  describe("edgit passthrough", () => {
-    it("should show help with no args", async () => {
+  describe("edgit hybrid integration", () => {
+    it("should call edgit runCLI with no args", async () => {
       await route(["edgit"]);
-      expect(banners.edgit).toHaveBeenCalled();
+      // Hybrid integration calls runCLI directly instead of spawning subprocess
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining(["edgit"]),
+      );
     });
 
-    it("should passthrough edgit commands to edgit CLI", async () => {
+    it("should pass all args to edgit runCLI", async () => {
       await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "edgit",
-        ["tag", "create", "prompt", "v1.0.0"],
-        expect.any(Object),
+      // Verifies args are passed correctly to edgit's runCLI
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          "edgit",
+          "tag",
+          "create",
+          "prompt",
+          "v1.0.0",
+        ]),
       );
+    });
+
+    it("should handle edgit init command", async () => {
+      await route(["edgit", "init"]);
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining(["edgit", "init"]),
+      );
+    });
+
+    it("should handle edgit components command", async () => {
+      await route(["edgit", "components", "list"]);
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining(["edgit", "components", "list"]),
+      );
+    });
+
+    it("should handle edgit deploy command", async () => {
+      await route(["edgit", "deploy", "set", "prompt", "--to", "staging"]);
+      expect(runEdgitCLI).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          "edgit",
+          "deploy",
+          "set",
+          "prompt",
+          "--to",
+          "staging",
+        ]),
+      );
+    });
+
+    it("should not spawn subprocess for edgit", async () => {
+      await route(["edgit", "status"]);
+      // Spawn should NOT be called for edgit - we use direct import
+      expect(spawn).not.toHaveBeenCalledWith("edgit", expect.anything(), expect.anything());
     });
   });
 

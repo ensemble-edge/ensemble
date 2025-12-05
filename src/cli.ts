@@ -12,6 +12,7 @@
 import { version } from "./version.js";
 import { colors, banners, log } from "./ui/index.js";
 import { route } from "./router.js";
+import { showEcosystemStatus } from "./discovery.js";
 
 /**
  * Print the main help message
@@ -58,6 +59,7 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   // Handle global flags
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
     printHelp();
+    showEcosystemStatus();
     return;
   }
 

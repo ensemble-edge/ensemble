@@ -12,3 +12,10 @@
 
 export { run } from "./cli.js";
 export { version } from "./version.js";
+export {
+  detectInstalledProducts,
+  getSuggestedProducts,
+  showProductHint,
+  showInitHints,
+  showEcosystemStatus,
+} from "./discovery.js";

@@ -2,8 +2,8 @@
 	"compilerOptions": {
 		"target": "es2021",
 		"lib": ["es2021"],
-		"module": "es2022",
-		"moduleResolution": "Bundler",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
 		"resolveJsonModule": true,
 		"allowJs": true,
 		"checkJs": false,
