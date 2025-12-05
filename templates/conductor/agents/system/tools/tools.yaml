@@ -1,0 +1,114 @@
+name: tools
+version: 1.0.0
+description: |
+  Invoke external MCP (Model Context Protocol) tools over HTTP.
+
+  Features:
+  - HTTP-only transport (no stdio complexity)
+  - Tool discovery with caching
+  - Bearer and OAuth authentication
+  - Configurable timeouts
+
+operation: code
+handler: ./tools.ts
+
+tags:
+  - tools
+  - mcp
+  - external
+  - integration
+
+schema:
+  input:
+    type: object
+    additionalProperties: true
+    description: Tool arguments (passed directly to the MCP tool)
+
+  output:
+    type: object
+    properties:
+      tool:
+        type: string
+        description: Tool name that was invoked
+      server:
+        type: string
+        description: MCP server name
+      content:
+        type: array
+        items:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [text, image, resource]
+            text:
+              type: string
+            data:
+              type: string
+            mimeType:
+              type: string
+        description: Tool result content
+      duration:
+        type: number
+        description: Execution time in ms
+      cached:
+        type: boolean
+      isError:
+        type: boolean
+
+config:
+  schema:
+    type: object
+    required: [mcp, tool]
+    properties:
+      mcp:
+        type: string
+        description: MCP server name (from conductor.config.ts)
+      tool:
+        type: string
+        description: Tool name to invoke
+      timeout:
+        type: integer
+        description: Request timeout override (ms)
+      cacheDiscovery:
+        type: boolean
+        default: true
+        description: Cache tool discovery results
+      cacheTTL:
+        type: integer
+        default: 3600
+        description: Cache TTL in seconds
+
+examples:
+  - name: invoke-tool
+    description: Invoke an MCP tool
+    input:
+      query: "What is the weather in San Francisco?"
+    config:
+      mcp: "weather-server"
+      tool: "get_weather"
+      timeout: 5000
+    output:
+      tool: "get_weather"
+      server: "weather-server"
+      content:
+        - type: text
+          text: "Current weather in San Francisco: 65F, partly cloudy"
+      duration: 350
+      isError: false
+
+  - name: github-search
+    description: Search GitHub via MCP tool
+    input:
+      query: "conductor yaml"
+      limit: 10
+    config:
+      mcp: "github"
+      tool: "search_repositories"
+    output:
+      tool: "search_repositories"
+      server: "github"
+      content:
+        - type: text
+          text: "Found 5 repositories matching 'conductor yaml'"
+      duration: 1200

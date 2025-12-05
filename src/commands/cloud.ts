@@ -457,7 +457,7 @@ export function showCloudHelp(): void {
   console.log("");
   console.log(colors.bold("Options:"));
   console.log("  --env <env>     Target environment (default: production)");
-  console.log("  --yes           Skip confirmation prompts");
+  console.log("  -y, --yes       Skip confirmation prompts (rotate/disable)");
   console.log("  --json          Output as JSON (status only)");
   console.log("");
   console.log(colors.bold("Examples:"));

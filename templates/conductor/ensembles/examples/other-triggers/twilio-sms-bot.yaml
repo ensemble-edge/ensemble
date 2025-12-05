@@ -1,0 +1,71 @@
+# Example: SMS Bot using Twilio Plugin
+# This demonstrates how plugins can register custom trigger types
+
+name: sms-support-bot
+description: AI-powered SMS support bot that responds to customer inquiries
+
+# Webhook trigger for Twilio SMS
+trigger:
+  - type: webhook
+    path: /webhooks/twilio/sms/support  # Recommended: /webhooks/* prefix
+    methods: [POST]
+    auth:
+      type: signature
+      secret: ${env.TWILIO_AUTH_TOKEN}
+    public: false
+
+agents:
+  # Classify the intent of the SMS
+  - name: classify-intent
+    operation: think
+    config:
+      model: gpt-4-mini
+      systemPrompt: |
+        You are a support intent classifier. Analyze the customer's SMS message and classify the intent.
+        Return JSON: {"intent": "support|billing|general|feedback"}
+      temperature: 0.3
+    input:
+      userPrompt: |
+        Customer message: {{message}}
+        From: {{from}}
+
+        What is the intent of this message?
+      message: ${input.message}
+      from: ${input.from}
+
+  # Route to appropriate handler based on intent
+  - name: handle-support-query
+    operation: think
+    config:
+      model: gpt-4-mini
+      systemPrompt: |
+        You are a helpful customer support assistant. Provide a concise, friendly response
+        to the customer's query via SMS (keep it under 160 characters if possible).
+      temperature: 0.7
+    input:
+      userPrompt: |
+        Customer query: {{message}}
+        Intent: {{intent}}
+
+        Provide a helpful response.
+      intent: ${classify-intent.intent}
+      message: ${input.message}
+      customer: ${input.from}
+    when: ${classify-intent.intent === 'support'}
+
+  # Generate friendly SMS reply
+  - name: format-sms-reply
+    operation: code
+    config:
+      script: scripts/examples/sms/format-sms-reply
+    input:
+      response: ${handle-support-query.response}
+      customerName: ${handle-support-query.customerName}
+
+input:
+  message: null
+  from: null
+
+output:
+  reply: ${format-sms-reply.output.reply}
+  timestamp: ${format-sms-reply.output.timestamp}

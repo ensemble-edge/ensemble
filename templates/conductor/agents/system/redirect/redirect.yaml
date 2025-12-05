@@ -1,0 +1,177 @@
+name: redirect
+version: 1.0.0
+description: |
+  URL redirect operations with support for permanent, expiring,
+  and single-use (magic) links. Stores data in Cloudflare KV.
+
+operation: code
+handler: ./redirect.ts
+
+tags:
+  - redirect
+  - storage
+  - kv
+
+schema:
+  input:
+    type: object
+    required: [action]
+    properties:
+      action:
+        type: string
+        enum: [resolve, create, get, update, delete, list]
+        description: Operation to perform
+
+      # For resolve/get/update/delete
+      slug:
+        type: string
+        description: The short code to look up
+
+      # For create/update
+      targetUrl:
+        type: string
+        format: uri
+        description: Destination URL
+      type:
+        type: string
+        enum: [permanent, expiring, single-use]
+        default: permanent
+      statusCode:
+        type: integer
+        enum: [301, 302, 307, 308]
+        default: 302
+      expiresAt:
+        type: string
+        format: date-time
+        description: Expiration timestamp (ISO 8601)
+      expiresIn:
+        type: integer
+        description: Seconds until expiration (alternative to expiresAt)
+      customSlug:
+        type: string
+        description: Custom slug (auto-generates if not provided)
+      metadata:
+        type: object
+        properties:
+          createdBy:
+            type: string
+          campaign:
+            type: string
+          tags:
+            type: array
+            items:
+              type: string
+          notes:
+            type: string
+
+      # For list
+      filter:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: [permanent, expiring, single-use]
+          used:
+            type: boolean
+          campaign:
+            type: string
+      limit:
+        type: integer
+        default: 50
+      cursor:
+        type: string
+
+      # For resolve
+      markAsUsed:
+        type: boolean
+        default: true
+        description: Mark single-use links as used
+
+  output:
+    type: object
+    properties:
+      success:
+        type: boolean
+      found:
+        type: boolean
+      targetUrl:
+        type: string
+      statusCode:
+        type: integer
+      error:
+        type: string
+        enum: [not_found, expired, already_used, slug_taken, invalid_url, binding_not_found]
+      errorMessage:
+        type: string
+      redirect:
+        type: object
+      redirects:
+        type: array
+      cursor:
+        type: string
+      total:
+        type: integer
+
+config:
+  schema:
+    type: object
+    required: [kvBinding]
+    properties:
+      kvBinding:
+        type: string
+        default: REDIRECTS_KV
+        description: KV namespace binding name
+      basePath:
+        type: string
+        default: /go
+        description: Base path for shortUrl computation
+      defaultStatusCode:
+        type: integer
+        enum: [301, 302, 307, 308]
+        default: 302
+      defaultType:
+        type: string
+        enum: [permanent, expiring, single-use]
+        default: permanent
+      slugLength:
+        type: integer
+        default: 7
+      slugAlphabet:
+        type: string
+        default: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+examples:
+  - name: resolve-link
+    description: Look up and resolve a short link
+    input:
+      action: resolve
+      slug: abc123
+    config:
+      kvBinding: REDIRECTS_KV
+      basePath: /go
+    output:
+      success: true
+      found: true
+      targetUrl: "https://example.com/destination"
+      statusCode: 302
+
+  - name: create-magic-link
+    description: Create a single-use magic link
+    input:
+      action: create
+      targetUrl: "https://app.com/onboard?token=xyz"
+      type: single-use
+      expiresIn: 3600
+      metadata:
+        campaign: welcome-email
+    config:
+      kvBinding: REDIRECTS_KV
+    output:
+      success: true
+      redirect:
+        slug: m7kP2xQ
+        shortUrl: "https://myapp.com/go/m7kP2xQ"
+        targetUrl: "https://app.com/onboard?token=xyz"
+        type: single-use
+        statusCode: 302
+        used: false

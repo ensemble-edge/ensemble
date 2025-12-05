@@ -1,0 +1,29 @@
+# Debug Headers Endpoint
+#
+# Returns all request headers for debugging.
+# Useful for debugging:
+# - CORS configuration
+# - Auth header propagation
+# - CDN/proxy header injection (CF-Ray, X-Forwarded-For, etc.)
+
+name: debug-headers
+version: 1.0.0
+description: Inspect request headers
+
+trigger:
+  - type: http
+    path: /debug/headers
+    methods: [GET]
+    public: true
+
+flow:
+  - agent: echo
+    input:
+      data:
+        headers: ${ trigger.headers }
+
+output:
+  status: 200
+  body:
+    headers: ${ echo.output.echo.headers }
+    receivedAt: ${ echo.output.receivedAt }

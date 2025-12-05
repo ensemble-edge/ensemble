@@ -1,0 +1,32 @@
+# Debug Echo Endpoint
+#
+# Echoes back the request for debugging.
+# Returns method, path, headers, query, and body.
+# Useful for testing webhook integrations and API clients.
+
+name: debug-echo
+version: 1.0.0
+description: Echo endpoint that mirrors back the request
+
+trigger:
+  - type: http
+    path: /debug/echo
+    methods: [GET, POST, PUT, PATCH, DELETE]
+    public: true
+
+flow:
+  - agent: echo
+    input:
+      data:
+        request:
+          method: ${ trigger.method }
+          path: ${ trigger.path }
+          query: ${ trigger.query }
+          headers: ${ trigger.headers }
+          body: ${ trigger.body }
+
+output:
+  status: 200
+  body:
+    request: ${ echo.output.echo.request }
+    echoed_at: ${ echo.output.receivedAt }

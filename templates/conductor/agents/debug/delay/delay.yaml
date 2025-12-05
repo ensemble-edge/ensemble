@@ -1,0 +1,59 @@
+name: delay
+version: 1.0.0
+description: |
+  Adds artificial delay before returning. Useful for testing:
+  - Timeout handling
+  - Loading states in UI
+  - Concurrent flow behavior
+  - Rate limiting responses
+
+operation: code
+handler: ./delay.ts
+
+tags:
+  - debug
+  - utility
+  - testing
+
+schema:
+  input:
+    type: object
+    properties:
+      ms:
+        type: number
+        description: Delay in milliseconds (max 10000)
+        default: 1000
+        minimum: 0
+        maximum: 10000
+      passthrough:
+        description: Data to return after delay
+  output:
+    type: object
+    properties:
+      delayed:
+        type: boolean
+        description: Whether delay was applied
+      actualDelayMs:
+        type: number
+        description: Actual delay time in milliseconds
+      passthrough:
+        description: The passthrough data unchanged
+
+examples:
+  - name: simple-delay
+    description: Wait 500ms then return
+    input:
+      ms: 500
+    output:
+      delayed: true
+      actualDelayMs: 500
+
+  - name: delay-with-passthrough
+    description: Wait then return data
+    input:
+      ms: 1000
+      passthrough: { userId: "123", action: "test" }
+    output:
+      delayed: true
+      actualDelayMs: 1000
+      passthrough: { userId: "123", action: "test" }

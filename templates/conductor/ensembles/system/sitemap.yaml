@@ -1,0 +1,103 @@
+name: sitemap
+description: XML sitemap for search engines
+
+trigger:
+  - type: http
+    path: /sitemap.xml
+    methods: [GET]
+    public: true
+    responses:
+      html:
+        enabled: false
+      json:
+        enabled: false
+
+agents:
+  - name: generate-sitemap
+    operation: html
+    config:
+      templateEngine: liquid
+      contentType: application/xml
+      template: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          {% for url in urls %}
+          <url>
+            <loc>{{url.loc}}</loc>
+            {% if url.lastmod %}
+            <lastmod>{{url.lastmod}}</lastmod>
+            {% endif %}
+            {% if url.changefreq %}
+            <changefreq>{{url.changefreq}}</changefreq>
+            {% endif %}
+            {% if url.priority %}
+            <priority>{{url.priority}}</priority>
+            {% endif %}
+          </url>
+          {% endfor %}
+        </urlset>
+
+flow:
+  - agent: generate-sitemap
+    input:
+      urls: ${input.urls}
+
+# Default URLs - typically generated dynamically from your pages/content
+# In a real application, you would use a Data agent to query your content
+# and map results to sitemap URL format
+input:
+  urls:
+    type: array
+    required: false
+    default:
+      - loc: https://example.com/
+        lastmod: "2024-01-01"
+        changefreq: daily
+        priority: 1.0
+      - loc: https://example.com/docs
+        lastmod: "2024-01-01"
+        changefreq: weekly
+        priority: 0.8
+      - loc: https://example.com/about
+        changefreq: monthly
+        priority: 0.5
+
+output:
+  status: 200
+  format:
+    type: xml
+    extract: sitemap
+  body:
+    sitemap: ${generate-sitemap.output.html}
+
+# Example with dynamic content generation:
+# agents:
+#   - name: fetch-pages
+#     operation: data
+#     config:
+#       database: d1
+#       query: |
+#         SELECT slug, updated_at, priority
+#         FROM pages
+#         WHERE published = true
+#         ORDER BY priority DESC
+#
+#   - name: generate-sitemap
+#     operation: html
+#     config:
+#       templateEngine: liquid
+#       contentType: application/xml
+#       template: |
+#         <?xml version="1.0" encoding="UTF-8"?>
+#         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+#           {% for page in pages %}
+#           <url>
+#             <loc>{{baseUrl}}/{{page.slug}}</loc>
+#             <lastmod>{{page.updated_at}}</lastmod>
+#             <priority>{{page.priority}}</priority>
+#           </url>
+#           {% endfor %}
+#         </urlset>
+#     input:
+#       baseUrl: https://example.com
+#       pages: $fetch-pages.rows

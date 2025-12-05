@@ -1,0 +1,48 @@
+name: rag-qa
+description: |
+  Dead simple question answering with Cloudflare AutoRAG.
+
+  AutoRAG handles EVERYTHING automatically:
+  - Monitors R2 bucket for documents
+  - Automatically chunks and embeds documents
+  - Retrieves relevant content
+  - Generates grounded answers
+
+  Zero manual work required - just point to an R2 bucket!
+
+  Setup: Configure in wrangler.toml:
+    [[ai_autorag]]
+    name = "my-docs-rag"
+    r2_bucket = "my-docs"
+
+flow:
+  # Single step: AutoRAG retrieves AND generates answer
+  - agent: docs-search
+    input:
+      query: ${input.question}
+      topK: 5
+
+output:
+  # Success case - found relevant documents
+  - when: ${docs-search.output.sources && docs-search.output.sources.length > 0}
+    status: 200
+    body:
+      answer: ${docs-search.output.answer}
+      sources: ${docs-search.output.sources}
+      confidence: ${docs-search.output.sources[0].score}
+      metadata:
+        query: ${docs-search.output.query}
+
+  # Not found - no relevant documents
+  - when: ${docs-search.output.sources.length === 0}
+    status: 404
+    body:
+      error: "No relevant documents found"
+      query: ${input.question}
+      suggestion: "Try rephrasing your question or check the document index"
+
+  # Error fallback
+  - status: 500
+    body:
+      error: "Search failed"
+      message: ${docs-search.output.error}

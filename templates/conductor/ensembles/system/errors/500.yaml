@@ -1,0 +1,215 @@
+name: error-500
+description: 500 Internal Server Error page
+
+trigger:
+  - type: http
+    path: /errors/500
+    methods: [GET]
+    public: true
+    responses:
+      html:
+        enabled: true
+      json:
+        enabled: true
+
+agents:
+  - name: render-500
+    operation: html
+    config:
+      templateEngine: liquid
+      template: |
+        <div class="error-page">
+          <div class="error-content">
+            <div class="error-code">500</div>
+            <h1>Internal Server Error</h1>
+            <p class="error-message">
+              {% if message %}
+              {{message}}
+              {% else %}
+              Something went wrong on our end. We're working to fix it.
+              {% endif %}
+            </p>
+
+            {% if errorId %}
+            <div class="error-id">
+              <strong>Error ID:</strong> <code>{{errorId}}</code>
+              <p class="error-id-help">Please reference this ID when contacting support.</p>
+            </div>
+            {% endif %}
+
+            <div class="error-actions">
+              <a href="/" class="btn-primary">Go Home</a>
+              <button onclick="location.reload()" class="btn-secondary">Try Again</button>
+            </div>
+
+            {% if dev %}
+            <div class="error-details">
+              <h2>Error Details (Dev Mode)</h2>
+              <pre>{{errorStack}}</pre>
+            </div>
+            {% endif %}
+
+            {% if supportEmail %}
+            <div class="support-info">
+              <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      styles: |
+        body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          margin: 0;
+          padding: 0;
+          background: linear-gradient(135deg, #fc5c7d 0%, #6a82fb 100%);
+          color: #333;
+        }
+        .error-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem;
+        }
+        .error-content {
+          background: white;
+          border-radius: 16px;
+          padding: 3rem;
+          max-width: 700px;
+          width: 100%;
+          text-align: center;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .error-code {
+          font-size: 6rem;
+          font-weight: 900;
+          background: linear-gradient(135deg, #fc5c7d 0%, #6a82fb 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          margin-bottom: 1rem;
+          line-height: 1;
+        }
+        h1 {
+          font-size: 2rem;
+          margin: 0 0 1rem 0;
+          color: #2d3748;
+        }
+        .error-message {
+          font-size: 1.125rem;
+          color: #718096;
+          margin-bottom: 2rem;
+          line-height: 1.6;
+        }
+        .error-id {
+          background: #f7fafc;
+          border: 2px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 1rem;
+          margin: 1.5rem 0;
+        }
+        .error-id code {
+          font-family: 'Monaco', 'Courier New', monospace;
+          font-size: 0.875rem;
+          color: #fc5c7d;
+          background: white;
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+        }
+        .error-id-help {
+          font-size: 0.875rem;
+          color: #718096;
+          margin: 0.5rem 0 0 0;
+        }
+        .error-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: center;
+          margin: 2rem 0;
+          flex-wrap: wrap;
+        }
+        .btn-primary, .btn-secondary {
+          padding: 0.875rem 2rem;
+          border-radius: 8px;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.3s;
+          display: inline-block;
+          cursor: pointer;
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #fc5c7d 0%, #6a82fb 100%);
+          color: white;
+          border: none;
+        }
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 20px rgba(252, 92, 125, 0.4);
+        }
+        .btn-secondary {
+          background: #f7fafc;
+          color: #fc5c7d;
+          border: 2px solid #fc5c7d;
+        }
+        .btn-secondary:hover {
+          background: #edf2f7;
+        }
+        .error-details {
+          text-align: left;
+          margin-top: 2rem;
+          padding: 1.5rem;
+          background: #2d3748;
+          border-radius: 8px;
+          color: white;
+        }
+        .error-details h2 {
+          margin-top: 0;
+          font-size: 1.125rem;
+          color: #fc5c7d;
+        }
+        .error-details pre {
+          overflow-x: auto;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+          font-size: 0.875rem;
+          line-height: 1.5;
+        }
+        .support-info {
+          margin-top: 2rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid #e2e8f0;
+          color: #718096;
+        }
+        .support-info a {
+          color: #fc5c7d;
+          text-decoration: none;
+          font-weight: 600;
+        }
+        .support-info a:hover {
+          text-decoration: underline;
+        }
+      seo:
+        title: "500 - Internal Server Error"
+        description: "An error occurred while processing your request"
+        robots: noindex, nofollow
+      meta:
+        - name: viewport
+          content: width=device-width, initial-scale=1
+        - http-equiv: status
+          content: "500"
+    input:
+      message: $input.message
+      errorId: $input.errorId
+      errorStack: $input.errorStack
+      dev: $input.dev
+      supportEmail: $input.supportEmail
+
+input:
+  message: null
+  errorId: null
+  errorStack: null
+  dev: false
+  supportEmail: support@example.com
+
+output:
+  html: ${render-500.output}

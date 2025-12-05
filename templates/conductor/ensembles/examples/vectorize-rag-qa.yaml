@@ -1,0 +1,79 @@
+name: vectorize-rag-qa
+description: |
+  Manual RAG with full control using Cloudflare Vectorize.
+
+  This approach gives you complete control over:
+  - Custom chunking strategies
+  - Embedding model selection
+  - Index management
+  - Metadata filtering
+
+  Use this when you need fine-grained control.
+  For automatic RAG with zero config, see rag-qa.yaml instead.
+
+  Setup:
+  1. Create Vectorize index:
+     npx wrangler vectorize create my-index --dimensions=768
+  2. Ingest documents with custom embeddings
+  3. Bind in wrangler.toml:
+     [[vectorize]]
+     binding = "VECTORIZE"
+     index_name = "my-index"
+
+trigger:
+  - type: http
+    path: /api/vectorize-qa
+    methods: [POST]
+    public: true
+
+flow:
+  # Step 1: Search Vectorize index manually
+  - agent: vectorize-search
+    input:
+      query: ${input.question}
+      topK: 5
+
+  # Step 2: Generate answer from retrieved context
+  - agent: answer-generator
+    operation: think
+    input:
+      prompt: |
+        Answer the question using ONLY the provided context.
+        If the context doesn't contain enough information, say so.
+
+        Context:
+        ${vectorize-search.output.context}
+
+        Question: ${input.question}
+
+        Instructions:
+        - Be concise and accurate
+        - Cite sources when possible [Source 1], [Source 2], etc.
+        - If information is missing, acknowledge it
+        - Use a helpful, professional tone
+
+output:
+  # Success case - found relevant documents
+  - when: ${vectorize-search.output.results && vectorize-search.output.results.length > 0}
+    status: 200
+    body:
+      answer: ${answer-generator.output.message}
+      sources: ${vectorize-search.output.results}
+      confidence: ${vectorize-search.output.results[0].score}
+      metadata:
+        retrievedDocs: ${vectorize-search.output.count}
+        query: ${vectorize-search.output.query}
+
+  # Not found - no relevant documents
+  - when: ${vectorize-search.output.results.length === 0}
+    status: 404
+    body:
+      error: "No relevant documents found"
+      query: ${input.question}
+      suggestion: "Try rephrasing your question or check if documents have been indexed"
+
+  # Error fallback
+  - status: 500
+    body:
+      error: "Search or generation failed"
+      message: ${vectorize-search.output.error || answer-generator.output.error}

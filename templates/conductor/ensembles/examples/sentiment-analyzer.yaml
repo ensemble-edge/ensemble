@@ -1,0 +1,74 @@
+name: sentiment-analyzer
+description: Analyze sentiment with structured output using inline schema
+
+flow:
+  - agent: analyze-sentiment
+
+trigger:
+  - type: webhook
+    path: /webhooks/analyze/sentiment  # Recommended: /webhooks/* prefix
+    methods: [POST]
+    public: true
+
+agents:
+  - name: analyze-sentiment
+    operation: think
+    config:
+      provider: anthropic
+      model: claude-sonnet-4
+      temperature: 0.3
+      maxTokens: 1000
+      prompt: |
+        Analyze the sentiment of the following text and provide a structured analysis.
+
+        Text: "${input.text}"
+      # Inline schema (not a component reference)
+      schema:
+        type: object
+        properties:
+          sentiment:
+            type: string
+            enum: [positive, negative, neutral, mixed]
+            description: Overall sentiment classification
+          confidence:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: Confidence score (0-1)
+          emotions:
+            type: array
+            description: Detected emotions
+            items:
+              type: object
+              properties:
+                emotion:
+                  type: string
+                  enum: [joy, sadness, anger, fear, surprise, disgust]
+                intensity:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+              required: [emotion, intensity]
+          key_phrases:
+            type: array
+            description: Key phrases that contributed to the sentiment
+            items:
+              type: string
+          reasoning:
+            type: string
+            description: Brief explanation of the sentiment analysis
+        required: [sentiment, confidence, reasoning]
+
+input:
+  text:
+    type: string
+    required: true
+    description: The text to analyze for sentiment
+
+output:
+  sentiment: ${analyze-sentiment.output.sentiment}
+  confidence: ${analyze-sentiment.output.confidence}
+  emotions: ${analyze-sentiment.output.emotions}
+  key_phrases: ${analyze-sentiment.output.key_phrases}
+  reasoning: ${analyze-sentiment.output.reasoning}
+  full_analysis: ${analyze-sentiment.output}

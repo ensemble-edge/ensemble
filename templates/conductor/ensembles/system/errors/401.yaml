@@ -1,0 +1,144 @@
+name: error-401
+description: 401 Unauthorized error page
+
+trigger:
+  - type: http
+    path: /errors/401
+    methods: [GET]
+    public: true
+    responses:
+      html:
+        enabled: true
+      json:
+        enabled: true
+
+agents:
+  - name: render-401
+    operation: html
+    config:
+      templateEngine: liquid
+      template: |
+        <div class="error-page">
+          <div class="error-content">
+            <div class="error-icon">🔒</div>
+            <div class="error-code">401</div>
+            <h1>Authentication Required</h1>
+            <p class="error-message">
+              {% if message %}
+              {{message}}
+              {% else %}
+              You need to be logged in to access this page. Please sign in with your credentials to continue.
+              {% endif %}
+            </p>
+
+            <div class="error-actions">
+              <a href="/login" class="btn-primary">Sign In</a>
+              <a href="/" class="btn-secondary">Go Home</a>
+            </div>
+
+            <p class="error-footer">Error Code: 401 | Unauthorized Access</p>
+          </div>
+        </div>
+      styles: |
+        body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          margin: 0;
+          padding: 0;
+          background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+          color: #333;
+        }
+        .error-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem;
+        }
+        .error-content {
+          background: white;
+          border-radius: 16px;
+          padding: 3rem;
+          max-width: 600px;
+          width: 100%;
+          text-align: center;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .error-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+        }
+        .error-code {
+          font-size: 6rem;
+          font-weight: 900;
+          background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          margin-bottom: 1rem;
+          line-height: 1;
+        }
+        h1 {
+          font-size: 2rem;
+          margin: 0 0 1rem 0;
+          color: #2d3748;
+        }
+        .error-message {
+          font-size: 1.125rem;
+          color: #718096;
+          margin-bottom: 2rem;
+          line-height: 1.6;
+        }
+        .error-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: center;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+        }
+        .btn-primary, .btn-secondary {
+          padding: 0.875rem 2rem;
+          border-radius: 8px;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.3s;
+          display: inline-block;
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+          color: white;
+          border: none;
+        }
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 20px rgba(255, 193, 7, 0.4);
+        }
+        .btn-secondary {
+          background: #f7fafc;
+          color: #ffc107;
+          border: 2px solid #ffc107;
+        }
+        .btn-secondary:hover {
+          background: #edf2f7;
+        }
+        .error-footer {
+          margin-top: 3rem;
+          font-size: 0.875rem;
+          color: #adb5bd;
+        }
+      seo:
+        title: "401 - Unauthorized"
+        description: "Authentication required to access this resource"
+        robots: noindex, nofollow
+      meta:
+        - name: viewport
+          content: width=device-width, initial-scale=1
+        - http-equiv: status
+          content: "401"
+    input:
+      message: $input.message
+
+input:
+  message: null
+
+output:
+  html: ${render-401.output}

@@ -1,0 +1,70 @@
+name: vectorize-search
+operation: data
+description: |
+  Manual RAG with Cloudflare Vectorize for full control.
+
+  Use this when you need:
+  - Custom chunking strategies
+  - Specialized embedding models
+  - Fine-grained metadata filtering
+  - Full control over indexing
+
+  Note: You must generate embeddings yourself.
+  For automatic RAG, use AutoRAG agent instead.
+
+schema:
+  input:
+    type: object
+    properties:
+      vector:
+        type: array
+        items:
+          type: number
+        description: Query embedding vector
+      topK:
+        type: integer
+        description: Number of results to return (optional)
+      filter:
+        type: object
+        description: Metadata filters (optional)
+  output:
+    type: object
+    properties:
+      matches:
+        type: array
+        description: Search results
+      count:
+        type: integer
+
+config:
+  # Database type (required for data agents)
+  database: vectorize
+
+  # Operation type
+  operation: query
+
+  # Vectorize index binding name from wrangler.toml
+  binding: "VECTORIZE"
+
+  # Number of results to return
+  topK: 5
+
+  # Minimum similarity score threshold (0-1)
+  minScore: 0.7
+
+  # Enable hybrid search (vector + keyword)
+  hybridSearch: false
+
+  # Optional metadata filters
+  # filter:
+  #   category: "api-docs"
+  #   version: "2.0"
+
+# Example wrangler.toml configuration:
+#
+# [[vectorize]]
+# binding = "VECTORIZE"
+# index_name = "my-index"
+#
+# Create index:
+# npx wrangler vectorize create my-index --dimensions=768

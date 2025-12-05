@@ -1,0 +1,47 @@
+# Documentation Writer Configuration
+#
+# Controls how the AI-powered documentation generator enhances your API docs.
+
+# AI Model Settings
+model: "@cf/anthropic/claude-3-5-sonnet-20240620"
+temperature: 0.3  # Lower temperature for more consistent, factual output
+maxTokens: 4000   # Enough for detailed documentation
+
+# Documentation Style
+style:
+  tone: "professional-friendly"  # Clear and helpful without being overly casual
+  detailLevel: "comprehensive"   # Full explanations with examples
+  audienceLevel: "intermediate"  # Assumes basic API knowledge
+
+# Content Preferences
+includeExamples: true
+includeErrorCases: true
+includeBestPractices: true
+includeSecurityNotes: true
+includePerformanceNotes: true
+
+# Example Generation
+examples:
+  useRealisticData: true        # Generate realistic example data
+  includeMultipleScenarios: true # Show different use cases
+  includeEdgeCases: true         # Cover edge cases and gotchas
+
+# Output Customization
+sections:
+  - summary
+  - description
+  - parameters
+  - requestExample
+  - responseExample
+  - errorHandling
+  - bestPractices
+  - notes
+
+# Enhancement Rules
+enhance:
+  addMissingDescriptions: true
+  improveParameterDocs: true
+  generateRealisticExamples: true
+  addErrorDocumentation: true
+  addRateLimitInfo: true
+  addAuthenticationDetails: true

@@ -1,0 +1,125 @@
+name: fetch
+version: 1.0.0
+description: |
+  HTTP client with configurable retry logic and exponential backoff.
+
+  Features:
+  - Configurable retry attempts with exponential backoff
+  - Timeout handling
+  - Custom headers support
+  - All HTTP methods (GET, POST, PUT, DELETE, PATCH)
+  - Automatic JSON parsing
+
+operation: code
+handler: ./fetch.ts
+
+tags:
+  - fetch
+  - http
+  - client
+  - api
+
+schema:
+  input:
+    type: object
+    required: [url]
+    properties:
+      url:
+        type: string
+        format: uri
+        description: URL to fetch
+      body:
+        description: Request body (for POST, PUT, PATCH)
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+        description: Additional request headers
+
+  output:
+    type: object
+    properties:
+      success:
+        type: boolean
+      status:
+        type: integer
+        description: HTTP status code
+      statusText:
+        type: string
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+      body:
+        description: Response body (parsed JSON if applicable)
+      duration:
+        type: number
+        description: Total request time in ms
+      attempt:
+        type: integer
+        description: Which attempt succeeded (1-based)
+
+config:
+  schema:
+    type: object
+    properties:
+      method:
+        type: string
+        enum: [GET, POST, PUT, DELETE, PATCH]
+        default: GET
+        description: HTTP method
+      headers:
+        type: object
+        additionalProperties:
+          type: string
+        description: Default headers for all requests
+      retry:
+        type: integer
+        default: 3
+        description: Number of retry attempts
+      timeout:
+        type: integer
+        default: 30000
+        description: Request timeout in milliseconds
+      retryDelay:
+        type: integer
+        default: 1000
+        description: Initial delay for exponential backoff (ms)
+
+examples:
+  - name: simple-get
+    description: Simple GET request
+    input:
+      url: "https://api.example.com/users/1"
+    config:
+      method: GET
+    output:
+      success: true
+      status: 200
+      statusText: "OK"
+      body:
+        id: 1
+        name: "John Doe"
+      duration: 150
+      attempt: 1
+
+  - name: post-with-retry
+    description: POST request with retry configuration
+    input:
+      url: "https://api.example.com/users"
+      body:
+        name: "Jane Doe"
+        email: "jane@example.com"
+      headers:
+        X-API-Key: "secret"
+    config:
+      method: POST
+      retry: 3
+      timeout: 5000
+    output:
+      success: true
+      status: 201
+      body:
+        id: 2
+        name: "Jane Doe"
+      attempt: 1

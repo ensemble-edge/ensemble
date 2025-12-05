@@ -1,0 +1,14 @@
+name: authenticate
+operation: code
+handler: ./index.ts
+description: Handles user login authentication with session management
+
+schema:
+  input:
+    email: string?
+    password: string?
+  output:
+    success: boolean
+    token: string?
+    redirectTo: string?
+    error: string?

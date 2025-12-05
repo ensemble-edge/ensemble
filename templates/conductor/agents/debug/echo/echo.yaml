@@ -1,0 +1,49 @@
+name: echo
+version: 1.0.0
+description: |
+  Returns input unchanged - useful for debugging flows and inspecting
+  what data reaches an agent after transformations.
+
+operation: code
+handler: ./echo.ts
+
+tags:
+  - debug
+  - utility
+
+schema:
+  input:
+    type: object
+    properties:
+      data:
+        description: Any data to echo back
+  output:
+    type: object
+    properties:
+      echo:
+        description: The input data unchanged
+      receivedAt:
+        type: string
+        description: ISO timestamp when data was received
+      inputType:
+        type: string
+        description: JavaScript typeof the input data
+
+examples:
+  - name: echo-object
+    description: Echo back an object
+    input:
+      data: { name: "test", value: 123 }
+    output:
+      echo: { name: "test", value: 123 }
+      receivedAt: "2025-01-15T10:30:00Z"
+      inputType: "object"
+
+  - name: echo-string
+    description: Echo back a string
+    input:
+      data: "Hello, World!"
+    output:
+      echo: "Hello, World!"
+      receivedAt: "2025-01-15T10:30:00Z"
+      inputType: "string"

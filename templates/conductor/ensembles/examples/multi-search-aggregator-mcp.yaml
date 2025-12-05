@@ -1,0 +1,91 @@
+name: multi-search-aggregator
+description: Aggregate search results from multiple MCP sources
+
+flow:
+  - agent: search-web
+  - agent: search-github
+  - agent: synthesize
+
+# Trigger via MCP tool for Claude Desktop and other clients
+trigger:
+  - type: mcp
+    public: false
+    auth:
+      type: bearer
+      secret: ${env.MCP_CLIENT_TOKEN}
+
+agents:
+  # Search web using Brave MCP
+  - name: search-web
+    operation: tools
+    config:
+      mcp: brave
+      tool: web_search
+      timeout: 15000
+
+  # Search GitHub code using GitHub MCP
+  - name: search-github
+    operation: tools
+    config:
+      mcp: github
+      tool: search_code
+      timeout: 15000
+
+  # Synthesize results with AI
+  - name: synthesize
+    operation: think
+    config:
+      provider: anthropic
+      model: claude-sonnet-4
+      prompt: |
+        # Multi-Source Search Results
+
+        ## Question
+        ${input.question}
+
+        ## Web Search Results (Brave)
+        ${search-web.output}
+
+        ## Code Search Results (GitHub)
+        ${search-github.output}
+
+        Please synthesize a comprehensive answer that:
+        1. Combines insights from both web and code sources
+        2. Prioritizes relevant information
+        3. Includes citations with URLs
+        4. Highlights code examples when relevant
+        5. Provides actionable recommendations
+
+        Format as JSON:
+        {
+          "answer": "Comprehensive answer",
+          "key_insights": ["insight1", "insight2"],
+          "web_sources": [{"title": "...", "url": "..."}],
+          "code_examples": [{"repo": "...", "path": "...", "url": "..."}],
+          "recommendations": ["rec1", "rec2"]
+        }
+
+input:
+  question:
+    type: string
+    required: true
+    description: Search question or query
+  web_query:
+    type: string
+    required: false
+    description: Specific web search query (defaults to question)
+  github_query:
+    type: string
+    required: false
+    description: Specific GitHub code query (defaults to question)
+  github_repo:
+    type: string
+    required: false
+    description: Limit GitHub search to specific repo (owner/repo)
+
+output:
+  answer: ${synthesize.output.answer}
+  insights: ${synthesize.output.key_insights}
+  web_sources: ${synthesize.output.web_sources}
+  code_examples: ${synthesize.output.code_examples}
+  recommendations: ${synthesize.output.recommendations}

@@ -1,0 +1,28 @@
+# Debug Ping Endpoint
+#
+# Minimal ping endpoint. Returns "pong" immediately.
+# Useful for verifying routing and basic connectivity.
+
+name: debug-ping
+version: 1.0.0
+description: Minimal ping endpoint for connectivity testing
+
+trigger:
+  - type: http
+    path: /debug/ping
+    methods: [GET, HEAD]
+    public: true
+
+flow:
+  - agent: echo
+    input:
+      data:
+        pong: true
+        message: "Conductor is running"
+
+output:
+  status: 200
+  body:
+    pong: ${echo.output.echo.pong}
+    timestamp: ${echo.output.receivedAt}
+    message: ${echo.output.echo.message}

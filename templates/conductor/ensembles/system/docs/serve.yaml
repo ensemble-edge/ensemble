@@ -1,0 +1,94 @@
+name: docs-serve
+version: 1.0.0
+description: |
+  Serve documentation pages via HTTP.
+  Provides landing page, markdown pages, agent/ensemble docs, and OpenAPI UI.
+
+trigger:
+  # Multi-path HTTP trigger for all docs routes
+  - type: http
+    paths:
+      # Landing page
+      - path: /docs
+        methods: [GET]
+      # Reserved routes
+      - path: /docs/agents
+        methods: [GET]
+      - path: /docs/agents/:name
+        methods: [GET]
+      - path: /docs/ensembles
+        methods: [GET]
+      - path: /docs/ensembles/:name
+        methods: [GET]
+      - path: /docs/api
+        methods: [GET]
+      - path: /docs/openapi.json
+        methods: [GET]
+      - path: /docs/openapi.yaml
+        methods: [GET]
+      # Markdown pages (catch-all)
+      - path: /docs/:slug
+        methods: [GET]
+    public: true
+
+flow:
+  - name: render
+    agent: docs
+    input:
+      # Determine action from path
+      # input.path, input.params, input.query come from HTTP trigger
+      action: "${input.path == '/docs' ? 'render-landing' : input.path == '/docs/agents' ? 'render-agents' : input.path == '/docs/ensembles' ? 'render-ensembles' : input.path == '/docs/api' ? 'render-api' : input.path == '/docs/openapi.json' ? 'generate-openapi' : input.path == '/docs/openapi.yaml' ? 'generate-openapi' : input.params.name && input.path.includes('/agents/') ? 'render-agent-detail' : input.params.name && input.path.includes('/ensembles/') ? 'render-ensemble-detail' : 'render-page'}"
+      slug: "${input.params.slug}"
+      name: "${input.params.name}"
+      format: "${input.path.endsWith('.yaml') ? 'yaml' : 'json'}"
+    config:
+      title: API Documentation
+      basePath: /docs
+      ui: stoplight
+      theme:
+        primaryColor: '#3b82f6'
+        darkMode: false
+      nav:
+        showReserved:
+          agents: true
+          ensembles: true
+          api: true
+
+output:
+  # HTML responses
+  - when: "${render.output.contentType == 'text/html'}"
+    status: 200
+    headers:
+      Content-Type: text/html
+      Cache-Control: public, max-age=300
+    rawBody: "${render.output.html}"
+
+  # JSON responses (OpenAPI)
+  - when: "${render.output.specJson}"
+    status: 200
+    headers:
+      Content-Type: application/json
+    body: "${render.output.spec}"
+
+  # YAML responses (OpenAPI)
+  - when: "${render.output.specYaml}"
+    status: 200
+    headers:
+      Content-Type: text/yaml
+    rawBody: "${render.output.specYaml}"
+
+  # Not found
+  - when: "${render.output.error == 'not_found'}"
+    status: 404
+    body:
+      success: false
+      error: not_found
+      message: "${render.output.errorMessage}"
+
+  # Error fallback
+  - when: "${!render.output.success}"
+    status: 500
+    body:
+      success: false
+      error: "${render.output.error}"
+      message: "${render.output.errorMessage}"

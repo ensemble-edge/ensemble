@@ -1,0 +1,13 @@
+name: process-middleware-request
+operation: code
+handler: ./index.ts
+description: Demonstrates middleware functionality by returning request metadata
+
+schema:
+  input: {}
+  output:
+    message: string
+    method: string
+    path: string
+    timestamp: string
+    middlewareApplied: string[]

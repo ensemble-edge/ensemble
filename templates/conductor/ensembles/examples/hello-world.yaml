@@ -1,0 +1,30 @@
+name: hello-world
+description: |
+  Basic ensemble example demonstrating Conductor's capabilities:
+  - Uses shared prompts (prompts/hello.md)
+  - Uses shared configs (configs/hello-settings.yaml)
+  - Shows how agents can reference versioned components
+  - Error handling with conditional output
+
+flow:
+  - agent: hello
+    input:
+      name: ${input.name}
+      style: ${input.style || "friendly"}
+      language: ${input.language || "en"}
+
+output:
+  # Success case
+  - when: ${hello.success}
+    status: 200
+    body:
+      greeting: ${hello.output.message}
+      metadata:
+        promptUsed: "prompts/hello.md"
+        configUsed: "configs/hello-settings.yaml"
+
+  # Error fallback
+  - status: 500
+    body:
+      error: "Failed to generate greeting"
+      message: ${hello.output.error}

@@ -1,0 +1,9 @@
+name: fetch-features
+operation: code
+handler: ./index.ts
+description: Fetches featured items from D1 database for homepage
+
+schema:
+  input: {}
+  output:
+    rows: array

@@ -1,0 +1,23 @@
+name: hello
+operation: code
+handler: ./index.ts
+description: |
+  Say hello to the user with a simple, deterministic greeting message.
+  This is a basic function agent that demonstrates the core Conductor workflow
+  without requiring AI models or external services.
+
+  The function implementation is in agents/hello/index.ts and uses:
+  - Input validation and sanitization
+  - Style-based greeting selection (formal, casual, friendly)
+  - Shared utility functions from src/lib/
+
+  💡 To see an AI-powered version using Cloudflare Workers AI, check out the
+  example agents in tests/examples/ or change this to type: "think".
+
+schema:
+  input:
+    name: string
+    style: string?
+    language: string?
+  output:
+    message: string

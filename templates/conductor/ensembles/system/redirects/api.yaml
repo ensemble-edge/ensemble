@@ -1,0 +1,128 @@
+# Redirect Management API
+#
+# CRUD operations for managing redirects.
+# Requires authentication.
+#
+# Endpoints:
+# - GET    /api/v1/redirects      - List all redirects
+# - POST   /api/v1/redirects      - Create redirect
+# - GET    /api/v1/redirects/:slug - Get redirect
+# - PUT    /api/v1/redirects/:slug - Update redirect
+# - DELETE /api/v1/redirects/:slug - Delete redirect
+
+name: redirect-api
+version: 1.0.0
+description: Management API for redirects (CRUD operations)
+
+trigger:
+  - type: http
+    paths:
+      - path: /api/v1/redirects
+        methods: [GET, POST]
+      - path: /api/v1/redirects/:slug
+        methods: [GET, PUT, DELETE]
+    auth:
+      requirement: required
+      methods: [bearer, apiKey]
+
+agents:
+  - name: manage
+    agent: redirect
+    input:
+      # Determine action from HTTP method and path
+      action: "${trigger.method == 'GET' && !trigger.params.slug ? 'list' : trigger.method == 'GET' && trigger.params.slug ? 'get' : trigger.method == 'POST' ? 'create' : trigger.method == 'PUT' ? 'update' : trigger.method == 'DELETE' ? 'delete' : 'get'}"
+
+      # For get/update/delete
+      slug: "${trigger.params.slug}"
+
+      # For create/update (from request body)
+      targetUrl: "${trigger.body.targetUrl}"
+      type: "${trigger.body.type}"
+      statusCode: "${trigger.body.statusCode}"
+      expiresIn: "${trigger.body.expiresIn}"
+      expiresAt: "${trigger.body.expiresAt}"
+      customSlug: "${trigger.body.slug}"
+      metadata: "${trigger.body.metadata}"
+
+      # For list (from query params)
+      filter:
+        type: "${trigger.query.type}"
+        used: "${trigger.query.used}"
+        campaign: "${trigger.query.campaign}"
+      limit: "${trigger.query.limit}"
+      cursor: "${trigger.query.cursor}"
+
+    config:
+      kvBinding: REDIRECTS_KV
+      basePath: /go
+      defaultStatusCode: 302
+      defaultType: permanent
+
+output:
+  # Create: 201 Created
+  - when: "${agents.manage.output.success && trigger.method == 'POST'}"
+    status: 201
+    body:
+      success: true
+      data: "${agents.manage.output.redirect}"
+
+  # Delete: 204 No Content
+  - when: "${agents.manage.output.success && trigger.method == 'DELETE'}"
+    status: 204
+
+  # Get/Update: 200 OK with single redirect
+  - when: "${agents.manage.output.success && agents.manage.output.redirect}"
+    status: 200
+    body:
+      success: true
+      data: "${agents.manage.output.redirect}"
+
+  # List: 200 OK with array
+  - when: "${agents.manage.output.success && agents.manage.output.redirects}"
+    status: 200
+    body:
+      success: true
+      data: "${agents.manage.output.redirects}"
+      pagination:
+        cursor: "${agents.manage.output.cursor}"
+        total: "${agents.manage.output.total}"
+
+  # Not found
+  - when: "${agents.manage.output.error == 'not_found'}"
+    status: 404
+    body:
+      success: false
+      error: not_found
+      message: "Redirect not found"
+
+  # Slug taken
+  - when: "${agents.manage.output.error == 'slug_taken'}"
+    status: 409
+    body:
+      success: false
+      error: slug_taken
+      message: "${agents.manage.output.errorMessage}"
+
+  # Invalid URL
+  - when: "${agents.manage.output.error == 'invalid_url'}"
+    status: 400
+    body:
+      success: false
+      error: invalid_url
+      message: "${agents.manage.output.errorMessage}"
+
+  # KV binding not found
+  - when: "${agents.manage.output.error == 'binding_not_found'}"
+    status: 500
+    body:
+      success: false
+      error: configuration_error
+      message: "Redirect service not configured. Add REDIRECTS_KV binding to wrangler.toml"
+
+  # Generic error fallback
+  - when: "${!agents.manage.output.success}"
+    status: 400
+    body:
+      success: false
+      error: "${agents.manage.output.error}"
+      message: "${agents.manage.output.errorMessage}"

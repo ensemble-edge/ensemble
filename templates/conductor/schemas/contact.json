@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Contact",
+  "description": "Schema for extracting contact information from text",
+  "type": "object",
+  "properties": {
+    "first_name": {
+      "type": "string",
+      "description": "Contact's first name"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Contact's last name"
+    },
+    "full_name": {
+      "type": "string",
+      "description": "Contact's full name"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Email address"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "company": {
+      "type": "string",
+      "description": "Company name"
+    },
+    "job_title": {
+      "type": "string",
+      "description": "Job title or position"
+    },
+    "address": {
+      "type": "object",
+      "description": "Physical address",
+      "properties": {
+        "street": {
+          "type": "string",
+          "description": "Street address"
+        },
+        "city": {
+          "type": "string",
+          "description": "City"
+        },
+        "state": {
+          "type": "string",
+          "description": "State or province"
+        },
+        "postal_code": {
+          "type": "string",
+          "description": "ZIP or postal code"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country"
+        }
+      }
+    },
+    "social_media": {
+      "type": "object",
+      "description": "Social media profiles",
+      "properties": {
+        "linkedin": {
+          "type": "string",
+          "format": "uri",
+          "description": "LinkedIn profile URL"
+        },
+        "twitter": {
+          "type": "string",
+          "description": "Twitter handle"
+        },
+        "github": {
+          "type": "string",
+          "description": "GitHub username"
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about the contact"
+    }
+  },
+  "required": ["full_name"],
+  "anyOf": [
+    {"required": ["email"]},
+    {"required": ["phone"]}
+  ]
+}

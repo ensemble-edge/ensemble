@@ -37,6 +37,7 @@ interface InitOptions {
   skipAuth: boolean;
   skipSecrets: boolean;
   provider: string | null;
+  yes: boolean; // Non-interactive mode
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,51 +45,16 @@ interface InitOptions {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Find the conductor package root by looking for node_modules/@ensemble-edge/conductor
+ * Get the path to bundled conductor templates
+ * Templates are now bundled with the ensemble CLI
  */
-async function findConductorPackage(): Promise<string | null> {
-  // Try common locations
-  const searchPaths = [
-    // Local node_modules
-    join(process.cwd(), "node_modules", "@ensemble-edge", "conductor"),
-    // Global pnpm
-    join(
-      process.env.HOME || "",
-      ".local",
-      "share",
-      "pnpm",
-      "global",
-      "5",
-      "node_modules",
-      "@ensemble-edge",
-      "conductor",
-    ),
-    // Global npm
-    join(
-      process.env.HOME || "",
-      ".npm-global",
-      "lib",
-      "node_modules",
-      "@ensemble-edge",
-      "conductor",
-    ),
-  ];
-
-  for (const searchPath of searchPaths) {
-    try {
-      const pkgPath = join(searchPath, "package.json");
-      if (existsSync(pkgPath)) {
-        const pkg = JSON.parse(await readFile(pkgPath, "utf-8"));
-        if (pkg.name === "@ensemble-edge/conductor") {
-          return searchPath;
-        }
-      }
-    } catch {
-      // Continue searching
-    }
-  }
-
-  return null;
+function getTemplatesDir(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  // Templates are at: ensemble/templates/conductor/
+  // This file is at: ensemble/dist/commands/conductor.js (after build)
+  // So we need to go up 2 levels from dist/commands to get to project root
+  return join(__dirname, "..", "..", "templates", "conductor");
 }
 
 /**
@@ -317,6 +283,7 @@ function parseInitArgs(args: string[]): {
     skipAuth: false,
     skipSecrets: false,
     provider: null,
+    yes: false,
   };
 
   let directory = ".";
@@ -334,6 +301,11 @@ function parseInitArgs(args: string[]): {
     } else if (arg === "--skip-auth") {
       options.skipAuth = true;
     } else if (arg === "--skip-secrets") {
+      options.skipSecrets = true;
+    } else if (arg === "--yes" || arg === "-y") {
+      // --yes enables non-interactive mode (skips auth and secrets prompts)
+      options.yes = true;
+      options.skipAuth = true;
       options.skipSecrets = true;
     } else if (arg === "--provider" && args[i + 1]) {
       options.provider = args[++i];
@@ -456,46 +428,35 @@ export async function conductorInit(args: string[]): Promise<void> {
   );
   const spinner2 = createSpinner("Finding Conductor templates...").start();
 
-  const conductorRoot = await findConductorPackage();
-  if (!conductorRoot) {
-    spinner2.error({ text: "Conductor package not found" });
-    console.log("");
-    log.info("Install Conductor first:");
-    console.log(colors.accent("  npm install @ensemble-edge/conductor"));
-    console.log("");
-    log.dim("Or use the conductor CLI directly:");
-    console.log(
-      colors.accent("  npx @ensemble-edge/conductor init " + directory),
-    );
-    return;
-  }
-
-  const templateDir = join(
-    conductorRoot,
-    "catalog",
-    "cloud",
-    options.template,
-    "templates",
-  );
+  // Templates are bundled with the ensemble CLI
+  const templateDir = getTemplatesDir();
   if (!existsSync(templateDir)) {
-    spinner2.error({ text: `Template '${options.template}' not found` });
-    log.dim("Available templates: cloudflare");
+    spinner2.error({ text: "Templates not found" });
+    console.log("");
+    log.error("Conductor templates are missing from the ensemble CLI package.");
+    log.dim("This is a bug - please report it at:");
+    console.log(
+      colors.accent("  https://github.com/ensemble-edge/ensemble/issues"),
+    );
     return;
   }
 
-  // Get conductor version for template substitution
-  let conductorVersion = "latest";
+  // Get conductor version from the template's package.json
+  let conductorVersion = "^0.4.11";
   try {
-    const pkgJson = JSON.parse(
-      await readFile(join(conductorRoot, "package.json"), "utf-8"),
+    const templatePkg = JSON.parse(
+      await readFile(join(templateDir, "package.json"), "utf-8"),
     );
-    conductorVersion = pkgJson.version || "latest";
+    const depVersion = templatePkg.dependencies?.["@ensemble-edge/conductor"];
+    if (depVersion) {
+      conductorVersion = depVersion;
+    }
   } catch {
     // Use default
   }
 
   spinner2.success({
-    text: `Template: ${options.template} (v${conductorVersion})`,
+    text: `Template: ${options.template} (conductor ${conductorVersion})`,
   });
 
   // Step: Copy files
@@ -690,9 +651,9 @@ export async function conductorValidate(_args: string[]): Promise<void> {
     return;
   }
 
-  // For now, delegate to the conductor CLI
+  // For now, validation is not yet implemented
   log.warn("Validation via ensemble CLI coming soon...");
-  log.dim("For now, use: npx @ensemble-edge/conductor validate");
+  log.dim("Validation will be available in a future release.");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -729,6 +690,7 @@ export function showConductorHelp(): void {
   console.log("  keys            Manage API keys");
   console.log("");
   console.log(colors.bold("Init Options:"));
+  console.log("  -y, --yes           Non-interactive mode (skip all prompts)");
   console.log("  --template <name>   Template to use (default: cloudflare)");
   console.log("  --force             Overwrite existing files");
   console.log("  --no-examples       Skip example files");
@@ -740,6 +702,7 @@ export function showConductorHelp(): void {
   console.log("");
   console.log(colors.bold("Examples:"));
   console.log(colors.accent("  ensemble conductor init my-project"));
+  console.log(colors.accent("  ensemble conductor init my-project --yes"));
   console.log(colors.accent("  ensemble conductor init ."));
   console.log(
     colors.accent("  ensemble conductor init my-project --no-examples"),

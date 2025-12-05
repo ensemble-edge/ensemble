@@ -1,0 +1,68 @@
+# Redirect Resolver
+#
+# Resolve short links and redirect to target URL.
+# Handles permanent, expiring, and single-use (magic) links.
+#
+# Requires: REDIRECTS_KV binding in wrangler.toml
+
+name: redirect-resolver
+version: 1.0.0
+description: Resolve short links and redirect to target URL
+
+trigger:
+  - type: http
+    path: /go/:slug
+    methods: [GET, HEAD]
+    public: true
+    priority: -100  # Low priority - checked after explicit routes
+
+agents:
+  - name: lookup
+    agent: redirect
+    input:
+      action: resolve
+      slug: "${trigger.params.slug}"
+      markAsUsed: true
+    config:
+      kvBinding: REDIRECTS_KV
+      basePath: /go
+
+# Conditional output based on lookup result
+output:
+  # Success: HTTP redirect
+  - when: "${agents.lookup.output.found == true}"
+    redirect:
+      url: "${agents.lookup.output.targetUrl}"
+      status: "${agents.lookup.output.statusCode}"
+
+  # Not found
+  - when: "${agents.lookup.output.error == 'not_found'}"
+    status: 404
+    body:
+      success: false
+      error: not_found
+      message: "Redirect not found"
+
+  # Expired
+  - when: "${agents.lookup.output.error == 'expired'}"
+    status: 410
+    body:
+      success: false
+      error: expired
+      message: "This link has expired"
+
+  # Already used (single-use)
+  - when: "${agents.lookup.output.error == 'already_used'}"
+    status: 410
+    body:
+      success: false
+      error: already_used
+      message: "This link has already been used"
+
+  # KV binding not found
+  - when: "${agents.lookup.output.error == 'binding_not_found'}"
+    status: 500
+    body:
+      success: false
+      error: configuration_error
+      message: "Redirect service not configured. Add REDIRECTS_KV binding to wrangler.toml"

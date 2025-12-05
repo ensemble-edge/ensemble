@@ -1,0 +1,223 @@
+name: smart-404
+description: AI-powered 404 page that suggests similar pages and tracks missing URLs
+
+trigger:
+  - type: http
+    path: /errors/smart-404
+    methods: [GET]
+    public: true
+    responses:
+      html:
+        enabled: true
+      json:
+        enabled: true
+
+flow:
+  - agent: track-404
+    input:
+      requestedPath: ${input.query.path}
+      referrer: ${input.headers.referer}
+      userAgent: ${input.headers.user-agent}
+  - agent: suggest-pages
+    input:
+      requestedPath: ${input.query.path}
+
+agents:
+  # Render the smart 404 page
+  - name: render-404
+    operation: html
+    config:
+      templateEngine: liquid
+      template: |
+        <div class="error-page smart-404">
+          <div class="error-content">
+            <div class="error-code">404</div>
+            <h1>Page Not Found</h1>
+            <p class="error-message">
+              The page at <code>{{requestedPath}}</code> doesn't exist or has been moved.
+            </p>
+
+            {% if suggestions %}
+            <div class="suggestions">
+              <h2>Were you looking for one of these?</h2>
+              <div class="suggestions-grid">
+                {% for suggestion in suggestions %}
+                <a href="{{suggestion.url}}" class="suggestion-card">
+                  <h3>{{suggestion.title}}</h3>
+                  <p>{{suggestion.description}}</p>
+                </a>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="error-actions">
+              <a href="/" class="btn-primary">Go Home</a>
+              <a href="javascript:history.back()" class="btn-secondary">Go Back</a>
+              <a href="/search" class="btn-secondary">Search</a>
+            </div>
+
+            <div class="help-section">
+              <p>Still can't find what you're looking for?</p>
+              <a href="/support">Contact Support</a>
+            </div>
+          </div>
+        </div>
+      styles: |
+        body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          margin: 0;
+          padding: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #333;
+        }
+        .error-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem;
+        }
+        .error-content {
+          background: white;
+          border-radius: 16px;
+          padding: 3rem;
+          max-width: 800px;
+          width: 100%;
+          text-align: center;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .error-code {
+          font-size: 6rem;
+          font-weight: 900;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          margin-bottom: 1rem;
+          line-height: 1;
+        }
+        h1 {
+          font-size: 2rem;
+          margin: 0 0 1rem 0;
+          color: #2d3748;
+        }
+        .error-message {
+          font-size: 1.125rem;
+          color: #718096;
+          margin-bottom: 2rem;
+          line-height: 1.6;
+        }
+        .error-message code {
+          background: #f7fafc;
+          padding: 0.25rem 0.5rem;
+          border-radius: 4px;
+          font-family: monospace;
+          color: #667eea;
+        }
+        .suggestions {
+          margin: 3rem 0;
+          text-align: left;
+        }
+        .suggestions h2 {
+          font-size: 1.5rem;
+          margin-bottom: 1.5rem;
+          color: #2d3748;
+          text-align: center;
+        }
+        .suggestions-grid {
+          display: grid;
+          gap: 1rem;
+        }
+        .suggestion-card {
+          background: #f7fafc;
+          padding: 1.5rem;
+          border-radius: 8px;
+          text-decoration: none;
+          color: inherit;
+          transition: all 0.2s;
+          border: 2px solid transparent;
+        }
+        .suggestion-card:hover {
+          border-color: #667eea;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        .suggestion-card h3 {
+          margin: 0 0 0.5rem 0;
+          color: #667eea;
+          font-size: 1.125rem;
+        }
+        .suggestion-card p {
+          margin: 0;
+          color: #718096;
+          font-size: 0.9rem;
+          line-height: 1.5;
+        }
+        .error-actions {
+          display: flex;
+          gap: 1rem;
+          justify-content: center;
+          margin: 2rem 0;
+          flex-wrap: wrap;
+        }
+        .btn-primary, .btn-secondary {
+          padding: 0.875rem 2rem;
+          border-radius: 8px;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.3s;
+          display: inline-block;
+        }
+        .btn-primary {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+        }
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+          background: #f7fafc;
+          color: #667eea;
+          border: 2px solid #667eea;
+        }
+        .btn-secondary:hover {
+          background: #edf2f7;
+        }
+        .help-section {
+          margin-top: 3rem;
+          padding-top: 2rem;
+          border-top: 1px solid #e2e8f0;
+          color: #718096;
+        }
+        .help-section a {
+          color: #667eea;
+          text-decoration: none;
+          font-weight: 600;
+        }
+        .help-section a:hover {
+          text-decoration: underline;
+        }
+      seo:
+        title: "404 - Page Not Found"
+        description: "The page you're looking for could not be found"
+        robots: noindex, nofollow
+      meta:
+        - name: viewport
+          content: width=device-width, initial-scale=1
+        - http-equiv: status
+          content: "404"
+    input:
+      requestedPath: ${input.query.path}
+      suggestions: ${suggest-pages.output.response}
+
+output:
+  error:
+    code: 404
+    message: Page Not Found
+  requestedPath: ${input.query.path}
+  tracked: ${track-404.output.tracked}
+  aiResponse: ${suggest-pages.output.response}
+  helpText: Can't find what you're looking for? Try one of our AI-suggested pages above.

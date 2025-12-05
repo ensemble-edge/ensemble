@@ -1,0 +1,45 @@
+name: batch-sms-alerts
+description: |
+  Send batch SMS alerts with personalized content.
+  Demonstrates:
+  - Batch SMS sending with rate limiting
+  - Personalized data per recipient
+  - Error handling for failed sends
+
+agents:
+  - name: send-alerts
+    operation: sms
+    config:
+      provider:
+        provider: twilio
+        twilio:
+          accountSid: ${env.TWILIO_ACCOUNT_SID}
+          authToken: ${env.TWILIO_AUTH_TOKEN}
+        from: ${env.TWILIO_PHONE_NUMBER}
+      rateLimit: 3  # 3 SMS per second (Twilio limit)
+
+flow:
+  - agent: send-alerts
+    input:
+      recipients:
+        - phone: "+1234567890"
+          data:
+            name: "Alice"
+            amount: "1,234"
+        - phone: "+1234567891"
+          data:
+            name: "Bob"
+            amount: "5,678"
+        - phone: "+1234567892"
+          data:
+            name: "Charlie"
+            amount: "9,012"
+      body: "Hi {{name}}, your account balance is ${{amount}}. Reply STOP to unsubscribe."
+      commonData:
+        companyName: "Acme Bank"
+
+output:
+  sent: ${send-alerts.output.sent}
+  failed: ${send-alerts.output.failed}
+  messageIds: ${send-alerts.output.messageIds}
+  errors: ${send-alerts.output.errors}

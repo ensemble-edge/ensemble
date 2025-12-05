@@ -1,0 +1,12 @@
+name: greet-user
+operation: code
+handler: ./index.ts
+description: Simple greeting handler for HTTP endpoints
+
+schema:
+  input:
+    name: string?
+  output:
+    greeting: string
+    timestamp: string
+    message: string

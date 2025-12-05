@@ -1,0 +1,54 @@
+# AI Greeting Example
+# Demonstrates intuitive output mapping for think agents using Workers AI
+
+name: ai-greeting
+description: |
+  AI-powered greeting using Cloudflare Workers AI.
+  Shows how think agent output maps to schema-defined field names.
+
+trigger:
+  - type: http
+    path: /ai/hello/:name
+    methods: [GET]
+    public: true
+    responses:
+      json:
+        enabled: true
+
+# Inline agent definition for Workers AI
+agents:
+  - name: generate-greeting
+    operation: think
+    config:
+      provider: workers-ai
+      model: "@cf/meta/llama-3.1-8b-instruct"
+      temperature: 0.7
+      maxTokens: 100
+    schema:
+      input:
+        name: string
+      output:
+        # Define the field name you want to use
+        greeting: string
+
+flow:
+  - agent: generate-greeting
+    input:
+      # Template variables use {{}} syntax in prompts
+      prompt: "Generate a warm, friendly greeting for someone named {{name}}. Keep it under 20 words."
+      name: ${params.name}
+
+output:
+  # Use the schema-defined field name - intuitive and clean!
+  greeting: ${generate-greeting.output.greeting}
+  # Metadata is available via _meta if needed
+  model: ${generate-greeting.output._meta.model}
+
+# Usage:
+#   GET /ai/hello/Alice
+#   Response: { "greeting": "Hello Alice! So wonderful to meet you...", "model": "@cf/..." }
+#
+# How it works:
+# 1. Schema defines output.greeting → AI response maps to that field
+# 2. ${agent.output.greeting} accesses the AI's response directly
+# 3. Metadata (model, provider, tokens) available via ${agent.output._meta}

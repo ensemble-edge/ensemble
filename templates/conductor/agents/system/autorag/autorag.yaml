@@ -1,0 +1,127 @@
+name: autorag
+version: 1.0.0
+description: |
+  Cloudflare's fully managed RAG service with zero configuration.
+
+  AutoRAG provides completely automatic RAG with R2 storage integration:
+  - Automatic document ingestion from R2 buckets
+  - Automatic chunking with configurable size/overlap
+  - Automatic embedding generation via Workers AI
+  - Automatic indexing in Vectorize
+  - Continuous monitoring and updates
+  - Supports PDFs, images, text, HTML, CSV, and more
+
+  This is the easiest way to do RAG on Cloudflare - just point to an R2 bucket!
+
+operation: code
+handler: ./autorag.ts
+
+tags:
+  - rag
+  - autorag
+  - ai
+  - search
+  - vectorize
+
+schema:
+  input:
+    type: object
+    required: [query]
+    properties:
+      query:
+        type: string
+        description: Query text to search for
+      topK:
+        type: integer
+        description: Override number of results (optional)
+
+  output:
+    type: object
+    properties:
+      answer:
+        type: string
+        description: AI-generated answer (mode=answer only)
+      sources:
+        type: array
+        description: Source documents used for answer
+        items:
+          type: object
+          properties:
+            content:
+              type: string
+            score:
+              type: number
+            metadata:
+              type: object
+            id:
+              type: string
+      results:
+        type: array
+        description: Raw search results (mode=results only)
+      context:
+        type: string
+        description: Combined context string (mode=results only)
+      count:
+        type: integer
+        description: Number of results
+      query:
+        type: string
+        description: Original query
+
+config:
+  schema:
+    type: object
+    required: [instance]
+    properties:
+      instance:
+        type: string
+        description: AutoRAG instance name (configured in wrangler.toml)
+      mode:
+        type: string
+        enum: [answer, results]
+        default: answer
+        description: |
+          Return format:
+          - answer: AI-generated response grounded in documents
+          - results: Raw search results without generation
+      topK:
+        type: integer
+        description: Number of results to retrieve
+      rewriteQuery:
+        type: boolean
+        default: false
+        description: Enable query rewriting for better retrieval
+
+examples:
+  - name: ai-answer
+    description: Get an AI-generated answer grounded in documents
+    input:
+      query: "What is the company's refund policy?"
+    config:
+      instance: "my-autorag"
+      mode: answer
+      topK: 5
+    output:
+      answer: "Based on the documentation, the refund policy allows returns within 30 days..."
+      sources:
+        - content: "Refund Policy: Customers may return items within 30 days..."
+          score: 0.92
+          id: "doc-123"
+      query: "What is the company's refund policy?"
+
+  - name: search-only
+    description: Get raw search results without AI generation
+    input:
+      query: "pricing tiers"
+    config:
+      instance: "my-autorag"
+      mode: results
+      topK: 10
+    output:
+      results:
+        - content: "Enterprise tier: $500/month..."
+          score: 0.88
+          id: "pricing-doc"
+      context: "[1] Source: pricing-doc\nEnterprise tier: $500/month..."
+      count: 10
+      query: "pricing tiers"

@@ -1,0 +1,216 @@
+name: docs
+version: 1.0.0
+description: |
+  Documentation generation and serving. Handles:
+  - Landing page rendering
+  - Markdown page rendering with Handlebars
+  - Navigation generation
+  - Agent/ensemble discovery and documentation
+  - OpenAPI spec generation
+  - Interactive API docs (Stoplight, Redoc, Swagger, Scalar, RapiDoc)
+
+operation: code
+handler: ./docs.ts
+
+tags:
+  - docs
+  - openapi
+  - markdown
+  - system
+
+schema:
+  input:
+    type: object
+    required: [action]
+    properties:
+      action:
+        type: string
+        enum:
+          - render-landing
+          - render-page
+          - render-agents
+          - render-agent-detail
+          - render-ensembles
+          - render-ensemble-detail
+          - render-api
+          - generate-openapi
+          - list-pages
+        description: The documentation operation to perform
+
+      # For render-page
+      slug:
+        type: string
+        description: Page slug to render (e.g., 'getting-started')
+
+      # For render-agent-detail / render-ensemble-detail
+      name:
+        type: string
+        description: Agent or ensemble name for detail view
+
+      # For generate-openapi
+      format:
+        type: string
+        enum: [json, yaml]
+        default: json
+        description: OpenAPI spec format
+
+      # For render actions - passed from docs loader
+      pages:
+        type: array
+        description: Loaded markdown pages
+
+  output:
+    type: object
+    properties:
+      success:
+        type: boolean
+        description: Whether the operation succeeded
+
+      # For render actions
+      html:
+        type: string
+        description: Rendered HTML content
+      contentType:
+        type: string
+        description: Content-Type header value (text/html)
+
+      # For generate-openapi
+      spec:
+        type: object
+        description: OpenAPI specification object
+      specYaml:
+        type: string
+        description: OpenAPI spec as YAML string
+      specJson:
+        type: string
+        description: OpenAPI spec as JSON string
+
+      # For list-pages
+      pages:
+        type: array
+        description: Available documentation pages
+        items:
+          type: object
+          properties:
+            slug:
+              type: string
+            title:
+              type: string
+            order:
+              type: number
+
+      # Errors
+      error:
+        type: string
+        enum: [not_found, invalid_action, no_pages]
+      errorMessage:
+        type: string
+
+config:
+  schema:
+    type: object
+    properties:
+      # Branding
+      title:
+        type: string
+        default: API Documentation
+        description: Documentation site title
+      description:
+        type: string
+        description: Site description
+      logo:
+        type: string
+        description: URL to logo image
+      favicon:
+        type: string
+        description: URL to favicon
+
+      # UI Framework for OpenAPI
+      ui:
+        type: string
+        enum: [stoplight, redoc, swagger, scalar, rapidoc]
+        default: stoplight
+        description: OpenAPI UI framework
+
+      # Theme
+      theme:
+        type: object
+        properties:
+          primaryColor:
+            type: string
+            default: '#3b82f6'
+          darkMode:
+            type: boolean
+            default: false
+          customCss:
+            type: string
+            description: Custom CSS to inject
+
+      # Navigation
+      nav:
+        type: object
+        properties:
+          order:
+            type: array
+            items:
+              type: string
+            description: Page order by slug
+          hide:
+            type: array
+            items:
+              type: string
+            description: Pages to hide from navigation
+          showReserved:
+            type: object
+            properties:
+              agents:
+                type: boolean
+                default: true
+              ensembles:
+                type: boolean
+                default: true
+              api:
+                type: boolean
+                default: true
+
+      # Paths
+      basePath:
+        type: string
+        default: /docs
+        description: Base URL path for documentation
+
+      # Caching
+      cache:
+        type: object
+        properties:
+          enabled:
+            type: boolean
+            default: true
+          ttl:
+            type: integer
+            default: 300
+            description: Cache TTL in seconds
+
+examples:
+  - name: render-landing-page
+    description: Render the documentation landing page
+    input:
+      action: render-landing
+    config:
+      title: My API Documentation
+      basePath: /docs
+    output:
+      success: true
+      html: "<!DOCTYPE html>..."
+      contentType: "text/html"
+
+  - name: generate-openapi-yaml
+    description: Generate OpenAPI specification in YAML format
+    input:
+      action: generate-openapi
+      format: yaml
+    config:
+      title: My API Documentation
+    output:
+      success: true
+      specYaml: "openapi: 3.1.0\n..."

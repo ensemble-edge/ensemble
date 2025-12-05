@@ -1,0 +1,232 @@
+name: login
+description: Login page with form handling - demonstrates GET (display form) and POST (handle submission)
+
+trigger:
+  - type: http
+    path: /login
+    methods: [GET, POST]
+    public: true
+    responses:
+      html:
+        enabled: true
+      json:
+        enabled: true
+
+flow:
+  - agent: authenticate
+    input:
+      email: ${input.body.email}
+      password: ${input.body.password}
+
+agents:
+  # Render login page
+  - name: render-login
+    operation: html
+    config:
+      templateEngine: liquid
+      template: |
+        <div class="login-container">
+          <div class="login-card">
+            <h1>Sign In</h1>
+
+            {% if error %}
+            <div class="alert alert-error">
+              {{error}}
+            </div>
+            {% endif %}
+
+            {% if success %}
+            <div class="alert alert-success">
+              Login successful! Redirecting...
+              <script>
+                setTimeout(() => window.location.href = '{{redirectTo}}', 1500);
+              </script>
+            </div>
+            {% else %}
+            <form
+              method="POST"
+              action="/login"
+              hx-post="/login"
+              hx-target="#login-result"
+              hx-swap="innerHTML"
+            >
+              <div class="form-group">
+                <label for="email">Email</label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  required
+                  placeholder="demo@example.com"
+                  autocomplete="email"
+                >
+              </div>
+
+              <div class="form-group">
+                <label for="password">Password</label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  required
+                  placeholder="Enter your password"
+                  autocomplete="current-password"
+                >
+                <a href="/forgot-password" class="forgot-link">Forgot password?</a>
+              </div>
+
+              <div id="login-result"></div>
+
+              <button type="submit" class="btn-primary">Sign In</button>
+            </form>
+
+            <div class="demo-credentials">
+              <p><strong>Demo credentials:</strong></p>
+              <p>Email: demo@example.com</p>
+              <p>Password: demo123</p>
+            </div>
+
+            <p class="signup-link">
+              Don't have an account? <a href="/signup">Sign up</a>
+            </p>
+            {% endif %}
+          </div>
+        </div>
+      styles: |
+        body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          margin: 0;
+          padding: 0;
+        }
+        .login-container {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .login-card {
+          background: white;
+          padding: 3rem;
+          border-radius: 16px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          width: 100%;
+          max-width: 450px;
+        }
+        .login-card h1 {
+          font-size: 2rem;
+          margin: 0 0 2rem 0;
+          color: #212529;
+          text-align: center;
+        }
+        .alert {
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1.5rem;
+        }
+        .alert-error {
+          background: #f8d7da;
+          color: #721c24;
+          border: 1px solid #f5c6cb;
+        }
+        .alert-success {
+          background: #d4edda;
+          color: #155724;
+          border: 1px solid #c3e6cb;
+        }
+        .form-group {
+          margin-bottom: 1.5rem;
+        }
+        .form-group label {
+          display: block;
+          margin-bottom: 0.5rem;
+          font-weight: 600;
+          color: #212529;
+        }
+        .form-group input {
+          width: 100%;
+          padding: 0.875rem;
+          border: 2px solid #e9ecef;
+          border-radius: 8px;
+          font-size: 1rem;
+          transition: border-color 0.2s;
+          box-sizing: border-box;
+        }
+        .form-group input:focus {
+          outline: none;
+          border-color: #667eea;
+        }
+        .forgot-link {
+          display: inline-block;
+          margin-top: 0.5rem;
+          font-size: 0.875rem;
+          color: #667eea;
+          text-decoration: none;
+        }
+        .forgot-link:hover {
+          text-decoration: underline;
+        }
+        .btn-primary {
+          width: 100%;
+          padding: 1rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: transform 0.2s;
+        }
+        .btn-primary:hover {
+          transform: translateY(-2px);
+        }
+        .btn-primary:active {
+          transform: translateY(0);
+        }
+        .demo-credentials {
+          margin: 1.5rem 0;
+          padding: 1rem;
+          background: #f8f9fa;
+          border-radius: 8px;
+          font-size: 0.875rem;
+        }
+        .demo-credentials p {
+          margin: 0.25rem 0;
+          color: #6c757d;
+        }
+        .demo-credentials strong {
+          color: #212529;
+        }
+        .signup-link {
+          text-align: center;
+          margin: 1.5rem 0 0 0;
+          color: #6c757d;
+        }
+        .signup-link a {
+          color: #667eea;
+          text-decoration: none;
+          font-weight: 600;
+        }
+        .signup-link a:hover {
+          text-decoration: underline;
+        }
+      seo:
+        title: "Sign In"
+        description: "Sign in to your account"
+        robots: noindex, nofollow
+      meta:
+        - name: viewport
+          content: width=device-width, initial-scale=1
+      scripts:
+        - src: https://unpkg.com/htmx.org@1.9.10
+    input:
+      error: ${authenticate.output.error}
+      success: ${authenticate.output.success}
+      redirectTo: ${authenticate.output.redirectTo}
+
+output:
+  success: ${authenticate.output.success}
+  token: ${authenticate.output.token}
+  redirectTo: ${authenticate.output.redirectTo}
+  error: ${authenticate.output.error}

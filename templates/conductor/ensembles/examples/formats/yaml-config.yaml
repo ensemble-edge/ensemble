@@ -1,0 +1,90 @@
+name: yaml-config
+description: |
+  YAML configuration export example using the format system.
+  Demonstrates automatic Content-Type (application/x-yaml) via format: yaml
+  with built-in object-to-YAML serialization.
+
+trigger:
+  - type: http
+    path: /config.yaml
+    methods: [GET]
+    public: true
+
+agents:
+  - name: build-config
+    operation: transform
+    config:
+      # Build a configuration object that will be serialized to YAML
+      expression: |
+        {
+          "version": "1.0",
+          "app": {
+            "name": "{{ input.appName }}",
+            "environment": "{{ input.environment }}",
+            "debug": {{ input.debug }}
+          },
+          "database": {
+            "host": "{{ input.dbHost }}",
+            "port": {{ input.dbPort }},
+            "name": "{{ input.dbName }}"
+          },
+          "features": {{ input.features | json }},
+          "logging": {
+            "level": "{{ input.logLevel }}",
+            "format": "json"
+          }
+        }
+
+flow:
+  - agent: build-config
+    input:
+      appName: ${input.appName}
+      environment: ${input.environment}
+      debug: ${input.debug}
+      dbHost: ${input.dbHost}
+      dbPort: ${input.dbPort}
+      dbName: ${input.dbName}
+      features: ${input.features}
+      logLevel: ${input.logLevel}
+
+input:
+  appName:
+    type: string
+    default: "my-app"
+  environment:
+    type: string
+    default: "production"
+  debug:
+    type: boolean
+    default: false
+  dbHost:
+    type: string
+    default: "localhost"
+  dbPort:
+    type: number
+    default: 5432
+  dbName:
+    type: string
+    default: "app_db"
+  features:
+    type: array
+    default:
+      - "auth"
+      - "notifications"
+      - "analytics"
+  logLevel:
+    type: string
+    default: "info"
+
+# The format: yaml option will:
+# 1. Set Content-Type: application/x-yaml
+# 2. Auto-serialize the extracted config object to YAML format
+output:
+  status: 200
+  headers:
+    Content-Disposition: attachment; filename="config.yaml"
+  format:
+    type: yaml
+    extract: config
+  body:
+    config: ${build-config.output}

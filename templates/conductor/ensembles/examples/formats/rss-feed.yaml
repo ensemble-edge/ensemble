@@ -1,0 +1,97 @@
+name: rss-feed
+description: |
+  RSS 2.0 feed example using the format system.
+  Demonstrates automatic Content-Type (application/rss+xml) via format: rss
+
+trigger:
+  - type: http
+    path: /feed.rss
+    methods: [GET]
+    public: true
+    # Cache RSS feeds for 1 hour
+    cache:
+      enabled: true
+      ttl: 3600
+
+agents:
+  - name: generate-rss
+    operation: html
+    config:
+      templateEngine: liquid
+      template: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+          <channel>
+            <title>{{title}}</title>
+            <link>{{link}}</link>
+            <description>{{description}}</description>
+            <language>{{language}}</language>
+            <lastBuildDate>{{lastBuildDate}}</lastBuildDate>
+            <atom:link href="{{feedUrl}}" rel="self" type="application/rss+xml"/>
+            {% for item in items %}
+            <item>
+              <title>{{item.title}}</title>
+              <link>{{item.link}}</link>
+              <description><![CDATA[{{item.description}}]]></description>
+              <pubDate>{{item.pubDate}}</pubDate>
+              <guid isPermaLink="true">{{item.link}}</guid>
+              {% if item.author %}
+              <author>{{item.author}}</author>
+              {% endif %}
+              {% if item.category %}
+              <category>{{item.category}}</category>
+              {% endif %}
+            </item>
+            {% endfor %}
+          </channel>
+        </rss>
+
+flow:
+  - agent: generate-rss
+    input:
+      title: ${input.title}
+      link: ${input.link}
+      description: ${input.description}
+      language: ${input.language}
+      lastBuildDate: ${input.lastBuildDate}
+      feedUrl: ${input.feedUrl}
+      items: ${input.items}
+
+input:
+  title:
+    type: string
+    default: "My Blog"
+  link:
+    type: string
+    default: "https://example.com"
+  description:
+    type: string
+    default: "Latest posts from my blog"
+  language:
+    type: string
+    default: "en-us"
+  lastBuildDate:
+    type: string
+    default: "Mon, 01 Jan 2024 00:00:00 GMT"
+  feedUrl:
+    type: string
+    default: "https://example.com/feed.rss"
+  items:
+    type: array
+    default:
+      - title: "First Post"
+        link: "https://example.com/posts/first"
+        description: "This is my first blog post"
+        pubDate: "Mon, 01 Jan 2024 00:00:00 GMT"
+        author: "author@example.com"
+        category: "Tech"
+      - title: "Second Post"
+        link: "https://example.com/posts/second"
+        description: "Another great article"
+        pubDate: "Tue, 02 Jan 2024 00:00:00 GMT"
+
+output:
+  status: 200
+  format: rss
+  body:
+    feed: ${generate-rss.output.html}
