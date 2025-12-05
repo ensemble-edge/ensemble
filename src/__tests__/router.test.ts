@@ -119,16 +119,6 @@ describe("router", () => {
       expect(banners.cloud).toHaveBeenCalled();
     });
 
-    it("should route login command", async () => {
-      await route(["login"]);
-      expect(log.warn).toHaveBeenCalledWith("Login command coming soon...");
-    });
-
-    it("should route config command", async () => {
-      await route(["config"]);
-      expect(log.warn).toHaveBeenCalledWith("Config command coming soon...");
-    });
-
     it("should passthrough unknown commands to wrangler", async () => {
       await route(["dev"]);
       expect(spawn).toHaveBeenCalledWith(

@@ -27,10 +27,6 @@ ${colors.bold("Products:")}
   chamber       Edge data layer
   cloud         Managed platform
 
-${colors.bold("Global:")}
-  login         Authenticate with Ensemble
-  config        CLI configuration
-
 ${colors.bold("Options:")}
   -v, --version  Show version
   -h, --help     Show help

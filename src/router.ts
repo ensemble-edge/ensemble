@@ -4,8 +4,7 @@
  * Routes commands to:
  * 1. Unified init wizard (no args)
  * 2. Ensemble products (conductor, edgit, chamber, cloud)
- * 3. Global commands (login, config)
- * 4. Wrangler passthrough (everything else)
+ * 3. Wrangler passthrough (everything else)
  */
 
 import { spawn } from "node:child_process";
@@ -26,23 +25,10 @@ const ENSEMBLE_PRODUCTS = ["conductor", "chamber", "cloud", "edgit"] as const;
 type EnsembleProduct = (typeof ENSEMBLE_PRODUCTS)[number];
 
 /**
- * Global ensemble commands
- */
-const ENSEMBLE_GLOBAL = ["login", "config"] as const;
-type EnsembleGlobal = (typeof ENSEMBLE_GLOBAL)[number];
-
-/**
  * Check if a command is an Ensemble product
  */
 function isEnsembleProduct(cmd: string): cmd is EnsembleProduct {
   return ENSEMBLE_PRODUCTS.includes(cmd as EnsembleProduct);
-}
-
-/**
- * Check if a command is a global Ensemble command
- */
-function isEnsembleGlobal(cmd: string): cmd is EnsembleGlobal {
-  return ENSEMBLE_GLOBAL.includes(cmd as EnsembleGlobal);
 }
 
 /**
@@ -76,8 +62,6 @@ export async function route(argv: string[]): Promise<void> {
   // Route to appropriate handler
   if (isEnsembleProduct(cmd)) {
     await routeProduct(cmd, args);
-  } else if (isEnsembleGlobal(cmd)) {
-    await routeGlobal(cmd, args);
   } else {
     // Wrangler passthrough
     await runWrangler(cmd, args);
@@ -126,20 +110,6 @@ async function routeProduct(
       break;
     case "cloud":
       await runCloud(args);
-      break;
-  }
-}
-
-/**
- * Route to global command handler
- */
-async function routeGlobal(cmd: EnsembleGlobal, args: string[]): Promise<void> {
-  switch (cmd) {
-    case "login":
-      await runLogin(args);
-      break;
-    case "config":
-      await runConfig(args);
       break;
   }
 }
@@ -245,25 +215,6 @@ async function runChamber(args: string[]): Promise<void> {
  */
 async function runCloud(args: string[]): Promise<void> {
   await routeCloudCommand(args);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Global Command Handlers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Run login command
- */
-async function runLogin(_args: string[]): Promise<void> {
-  log.warn("Login command coming soon...");
-  log.dim("For Cloudflare auth, run: wrangler login");
-}
-
-/**
- * Run config command
- */
-async function runConfig(_args: string[]): Promise<void> {
-  log.warn("Config command coming soon...");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
