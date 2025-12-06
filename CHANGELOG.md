@@ -1,5 +1,18 @@
 # @ensemble-edge/ensemble
 
+## 0.1.6
+
+### Patch Changes
+
+- 9da7073: ### Bug Fixes
+  - **Zero-config local development** - The AI binding in `wrangler.toml` is now commented out by default, allowing `pnpm run dev` to work immediately without Cloudflare authentication. Users can enable Workers AI via `ensemble configure` when ready.
+  - **Init wizard reliability** - Fixed the wizard flow with proper operation order (create structure → install deps), fail-fast behavior on errors, and better directory handling with clear error messages.
+
+  ### Improvements
+  - **ASCII art banners** - Added product-specific ASCII art banners (Conductor, Edgit, Cloud, Ensemble) with automatic fallback to emoji banners on narrow terminals (<60 cols).
+  - **Cleaner wizard output** - Single banner on startup, silent dependency installation with clean summary, conditional success messages based on actual outcome.
+  - **Removed placeholder commands** - Cleaned up unused login and config command stubs.
+
 ## 0.1.5
 
 ### Patch Changes
