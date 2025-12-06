@@ -40,6 +40,7 @@ vi.mock("../ui/prompts.js", () => ({
   promptMultiSelect: vi.fn().mockResolvedValue([]),
   isInteractive: vi.fn().mockReturnValue(false),
   isCI: vi.fn().mockReturnValue(true),
+  isDevContainer: vi.fn().mockReturnValue(false),
 }));
 
 // Mock UI
@@ -80,8 +81,10 @@ vi.mock("../ui/index.js", () => ({
   promptText: vi.fn().mockResolvedValue("my-test-project"),
   promptSelect: vi.fn().mockResolvedValue("conductor"),
   promptPassword: vi.fn().mockResolvedValue(""),
+  promptMultiSelect: vi.fn().mockResolvedValue([]),
   isInteractive: vi.fn().mockReturnValue(false),
   isCI: vi.fn().mockReturnValue(true),
+  isDevContainer: vi.fn().mockReturnValue(false),
   successBox: vi.fn((msg: string) => `[SUCCESS BOX: ${msg}]`),
   showNestedSuccess: vi.fn(),
   showNestedAction: vi.fn(),
