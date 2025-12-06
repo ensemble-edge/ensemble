@@ -14,22 +14,30 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  copyFile,
+  readdir,
+} from "node:fs/promises";
+import { resolve, basename, join, relative } from "node:path";
 import { spawn } from "node:child_process";
 import {
   colors,
   log,
   banners,
   createSpinner,
-  promptConfirm,
   promptText,
   promptSelect,
+  promptConfirm,
   isInteractive,
   isCI,
+  isDevContainer,
   successBox,
   showNestedSuccess,
 } from "../ui/index.js";
+import { authWizard, aiWizard, cloudWizard } from "../wizards/index.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -38,10 +46,26 @@ import {
 type Product = "conductor" | "edgit" | "chamber" | "cloud";
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
+/**
+ * Project setup type determines how much starter code to include
+ *
+ * - full: Template + example agents & ensembles (recommended)
+ * - starter: Template only, ready to code, no examples
+ * - basic: Minimal stub for manual setup (advanced users)
+ */
+type SetupType = "full" | "starter" | "basic";
+
 interface InitOptions {
   yes?: boolean;
   skipInstall?: boolean;
   packageManager?: PackageManager;
+  projectName?: string;
+  /** Project setup type (full/starter/basic) */
+  setup?: SetupType;
+  /** Include examples (alias for setup=full vs setup=starter) */
+  examples?: boolean;
+  /** Force overwrite existing directory */
+  force?: boolean;
 }
 
 interface InitResult {
@@ -131,31 +155,6 @@ function detectPackageManager(): PackageManager {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Run a command with inherited stdio (visible output)
- */
-async function runCommand(
-  command: string,
-  args: string[],
-  cwd?: string,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      stdio: "inherit",
-      shell: true,
-    });
-
-    child.on("close", (code) => {
-      resolve(code === 0);
-    });
-
-    child.on("error", () => {
-      resolve(false);
-    });
-  });
-}
-
-/**
  * Run a command silently, capturing output
  */
 async function runCommandSilent(
@@ -192,7 +191,7 @@ async function runCommandSilent(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Directory Validation
+// Directory Validation & Project Detection
 // ─────────────────────────────────────────────────────────────────────────────
 
 function isDirectoryEmpty(dir: string): boolean {
@@ -201,38 +200,303 @@ function isDirectoryEmpty(dir: string): boolean {
   return files.length === 0;
 }
 
+/**
+ * Project marker files that indicate we're inside a Conductor project
+ */
+const PROJECT_MARKERS = [
+  "wrangler.toml",
+  "wrangler.json",
+  "conductor.config.ts",
+  "conductor.config.js",
+];
+
+/**
+ * Find the root of an existing Conductor project by walking up the directory tree
+ *
+ * @param startDir - Directory to start searching from
+ * @returns Project root path if found, null otherwise
+ */
+function findProjectRoot(startDir: string): string | null {
+  let currentDir = resolve(startDir);
+  const root = resolve("/");
+
+  while (currentDir !== root) {
+    // Check for project marker files
+    for (const marker of PROJECT_MARKERS) {
+      if (existsSync(join(currentDir, marker))) {
+        return currentDir;
+      }
+    }
+
+    // Move up one directory
+    const parentDir = resolve(currentDir, "..");
+    if (parentDir === currentDir) break; // Reached filesystem root
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Template Directory Copy
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Files/directories to skip when copying templates
+ */
+const TEMPLATE_SKIP_PATTERNS = [
+  "node_modules",
+  ".git",
+  ".wrangler",
+  ".mf",
+  "dist",
+  ".cache",
+  "coverage",
+  ".nyc_output",
+  "tmp",
+  "temp",
+  ".DS_Store",
+  "Thumbs.db",
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lockb",
+  ".dev.vars", // secrets - only copy .dev.vars.example
+  ".env",
+  "*.tgz", // local package tarballs
+  "*.log",
+  "package.json.bak",
+  "CLAUDE.md", // internal dev docs
+  "DEVELOPMENT.md", // internal dev docs
+];
+
+/**
+ * Check if a file/directory should be skipped
+ */
+function shouldSkipPath(name: string): boolean {
+  for (const pattern of TEMPLATE_SKIP_PATTERNS) {
+    if (pattern.startsWith("*")) {
+      // Wildcard pattern like "*.tgz"
+      const ext = pattern.slice(1);
+      if (name.endsWith(ext)) return true;
+    } else if (name === pattern) {
+      return true;
+    }
+  }
+  return false;
+}
+
+interface CopyTemplateOptions {
+  /** Include examples directories */
+  includeExamples: boolean;
+  /** Project name for package.json substitution */
+  projectName: string;
+  /** Dev container mode - adjust dev script */
+  inDevContainer: boolean;
+}
+
+/**
+ * Recursively copy template directory
+ *
+ * Based on conductor CLI's copyDirectory() but with ensemble-specific handling:
+ * - Skips examples/ directories when includeExamples is false
+ * - Substitutes package.json name and conductor dependency
+ * - Adjusts dev script for dev container networking
+ */
+async function copyTemplateDirectory(
+  src: string,
+  dest: string,
+  options: CopyTemplateOptions,
+  files: string[] = [],
+  baseDest: string = dest,
+): Promise<string[]> {
+  await mkdir(dest, { recursive: true });
+
+  const entries = await readdir(src, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    const relativePath = relative(baseDest, destPath);
+
+    // Skip patterns (node_modules, .git, etc.)
+    if (shouldSkipPath(entry.name)) {
+      continue;
+    }
+
+    // Skip examples directories if --no-examples / starter mode
+    if (
+      !options.includeExamples &&
+      entry.name === "examples" &&
+      entry.isDirectory()
+    ) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      // Recurse into directory
+      await copyTemplateDirectory(srcPath, destPath, options, files, baseDest);
+      // Only add directory to list if it's not empty after recursion
+      const dirContents = await readdir(destPath).catch(() => []);
+      if (dirContents.length > 0) {
+        files.push(relativePath + "/");
+      }
+    } else {
+      // Handle special files
+      if (entry.name === "package.json") {
+        // Transform package.json
+        await copyAndTransformPackageJson(srcPath, destPath, options);
+        files.push(relativePath);
+      } else {
+        // Regular file copy
+        await copyFile(srcPath, destPath);
+        files.push(relativePath);
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Copy and transform package.json
+ *
+ * - Sets project name
+ * - Replaces local tgz dependency with "latest"
+ * - Adjusts dev script for dev containers
+ */
+async function copyAndTransformPackageJson(
+  srcPath: string,
+  destPath: string,
+  options: CopyTemplateOptions,
+): Promise<void> {
+  const content = await readFile(srcPath, "utf-8");
+  const pkg = JSON.parse(content);
+
+  // Set project name
+  pkg.name = options.projectName;
+
+  // Replace local tgz with latest version
+  if (pkg.dependencies?.["@ensemble-edge/conductor"]) {
+    pkg.dependencies["@ensemble-edge/conductor"] = "latest";
+  }
+
+  // Adjust dev script for dev container networking
+  if (options.inDevContainer && pkg.scripts?.dev) {
+    // Add --ip 0.0.0.0 if not already present
+    if (!pkg.scripts.dev.includes("--ip")) {
+      pkg.scripts.dev = pkg.scripts.dev.replace(
+        "wrangler dev",
+        "wrangler dev --ip 0.0.0.0",
+      );
+    }
+  }
+
+  await writeFile(destPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+/**
+ * Get the template directory path from installed conductor package
+ */
+function getTemplatePath(targetDir: string): string | null {
+  const conductorPath = resolve(
+    targetDir,
+    "node_modules/@ensemble-edge/conductor/catalog/cloud/cloudflare/templates",
+  );
+
+  if (existsSync(conductorPath)) {
+    return conductorPath;
+  }
+
+  return null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Create Project Structure
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function createProjectStructure(
+interface CreateProjectOptions {
+  /** Whether running in a dev container (adjusts scripts for networking) */
+  inDevContainer?: boolean;
+  /** Force overwrite existing directory */
+  force?: boolean;
+}
+
+/**
+ * Create minimal package.json to bootstrap npm install
+ *
+ * This creates just enough structure to run npm install and get the
+ * conductor package, which contains the templates we'll copy after.
+ */
+async function createMinimalPackageJson(
+  targetDir: string,
+  packageName: string,
+  product: Product,
+): Promise<void> {
+  const productConfig = PRODUCTS[product];
+
+  const packageJson = {
+    name: packageName,
+    version: "0.0.1",
+    private: true,
+    dependencies: {
+      [productConfig.package]: "latest",
+    },
+  };
+
+  await writeFile(
+    resolve(targetDir, "package.json"),
+    JSON.stringify(packageJson, null, 2),
+  );
+}
+
+/**
+ * Create basic project structure (minimal stub for advanced users)
+ *
+ * This is the "basic" setup mode - creates a minimal placeholder project
+ * without using templates. For users who want to set up everything manually.
+ */
+async function createBasicProjectStructure(
   projectName: string,
   product: Product,
+  options: CreateProjectOptions = {},
 ): Promise<InitResult> {
-  const targetDir = resolve(process.cwd(), projectName);
+  const cwd = process.cwd();
+  const { inDevContainer = false, force = false } = options;
+
+  // Handle "." meaning current directory
+  const isCurrentDir = projectName === ".";
+  const targetDir = isCurrentDir ? cwd : resolve(cwd, projectName);
+  const packageName = isCurrentDir ? basename(cwd) : projectName;
 
   try {
-    // Create directory if it doesn't exist
-    if (!existsSync(targetDir)) {
+    // Create directory if it doesn't exist (skip for current dir)
+    if (!isCurrentDir && !existsSync(targetDir)) {
       await mkdir(targetDir, { recursive: true });
     }
 
-    // Check if directory is empty
-    if (!isDirectoryEmpty(targetDir)) {
+    // Check if directory is empty (skip if --force)
+    if (!isDirectoryEmpty(targetDir) && !force) {
       return {
         success: false,
-        error: `Directory '${projectName}' is not empty`,
+        error: `Directory '${targetDir}' is not empty. Use --force to overwrite.`,
       };
     }
 
     // Create package.json with product as dependency
     const productConfig = PRODUCTS[product];
+
+    // Dev container networking: use --ip 0.0.0.0 for proper port forwarding
+    const devCommand = inDevContainer
+      ? "wrangler dev --ip 0.0.0.0"
+      : "wrangler dev";
+
     const packageJson = {
-      name: projectName,
+      name: packageName,
       version: "0.0.1",
       type: "module",
       scripts: {
-        dev: "wrangler dev",
+        dev: devCommand,
         deploy: "wrangler deploy",
         test: "vitest run",
       },
@@ -268,7 +532,7 @@ async function createProjectStructure(
       // Create wrangler.toml (AI binding commented out by default so local dev works)
       await writeFile(
         resolve(targetDir, "wrangler.toml"),
-        `name = "${projectName}"
+        `name = "${packageName}"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
@@ -342,7 +606,7 @@ interface Env {
 
       await writeFile(
         resolve(targetDir, "wrangler.toml"),
-        `name = "${projectName}"
+        `name = "${packageName}"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 `,
@@ -430,13 +694,166 @@ export async function initWizard(
 
   banners.ensemble();
 
+  // Show current working directory for clarity
+  // Handle case where cwd doesn't exist (e.g., user deleted the directory they were in)
+  let cwd: string;
+  try {
+    cwd = process.cwd();
+  } catch (error) {
+    log.error("Current directory no longer exists.");
+    log.newline();
+    log.plain(
+      "Your current directory was deleted. Please cd to a valid directory first:",
+    );
+    log.newline();
+    console.log(`  ${colors.accent("cd /tmp")}`);
+    console.log(`  ${colors.accent("ensemble conductor init my-project")}`);
+    log.newline();
+    return;
+  }
+  log.dim(`📂 ${cwd}`);
+
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 2: Product selection (if not preselected)
+  // Step 2: Detect existing project (block nested project creation)
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Find project root by walking up directory tree
+  const projectRoot = findProjectRoot(cwd);
+  const isExistingProject = projectRoot !== null;
+
+  // If inside an existing project, offer options
+  if (isExistingProject) {
+    const projectName = basename(projectRoot!);
+
+    if (options.force) {
+      // --force: automatically reinstall at project root
+      log.info(`Reinstalling at project root: ${colors.accent(projectName)}`);
+      log.dim(`📁 ${projectRoot}`);
+      process.chdir(projectRoot!);
+      options.projectName = ".";
+      log.newline();
+      // Fall through to continue with init
+    } else if (interactive) {
+      // Interactive: show options
+      log.newline();
+      log.info(`Found existing project: ${colors.accent(projectName)}`);
+      log.dim(`📁 ${projectRoot}`);
+      log.newline();
+
+      type ProjectAction = "reinstall" | "delete" | "new" | "exit";
+      const actionChoices: Array<{ title: string; value: ProjectAction }> = [
+        {
+          title: `Reinstall templates for "${projectName}"`,
+          value: "reinstall",
+        },
+        {
+          title: colors.warning(`Delete "${projectName}" and start fresh`),
+          value: "delete",
+        },
+        {
+          title: "Create a new project (different name)",
+          value: "new",
+        },
+        {
+          title: colors.dim("Exit"),
+          value: "exit",
+        },
+      ];
+
+      const action = await promptSelect<ProjectAction>(
+        "What would you like to do?",
+        actionChoices,
+      );
+
+      if (action === "exit") {
+        return;
+      }
+
+      if (action === "reinstall") {
+        // Confirm reinstall
+        log.newline();
+        log.warn("This will overwrite existing files in the project.");
+        const confirmText = await promptText(
+          `Type "reinstall" to confirm:`,
+          "",
+          {
+            validate: (v) => v === "reinstall" || `Type "reinstall" to confirm`,
+          },
+        );
+
+        if (confirmText !== "reinstall") {
+          log.dim("Cancelled.");
+          return;
+        }
+
+        process.chdir(projectRoot!);
+        options.force = true;
+        options.projectName = ".";
+        log.newline();
+        // Fall through to continue with init
+      } else if (action === "delete") {
+        // Confirm delete
+        log.newline();
+        log.warn(
+          `This will permanently delete "${projectRoot}" and cannot be undone!`,
+        );
+        const confirmText = await promptText(`Type "delete" to confirm:`, "", {
+          validate: (v) => v === "delete" || `Type "delete" to confirm`,
+        });
+
+        if (confirmText !== "delete") {
+          log.dim("Cancelled.");
+          return;
+        }
+
+        // Delete the project directory
+        const { rm } = await import("node:fs/promises");
+        const parentDir = resolve(projectRoot!, "..");
+        log.newline();
+        const deleteSpinner = createSpinner(
+          `Deleting ${projectName}...`,
+        ).start();
+        try {
+          await rm(projectRoot!, { recursive: true, force: true });
+          deleteSpinner.success({ text: `Deleted ${projectName}` });
+        } catch (error) {
+          deleteSpinner.error({ text: `Failed to delete ${projectName}` });
+          log.plain((error as Error).message);
+          return;
+        }
+
+        // After delete, the user's shell may be in a directory that no longer exists
+        // We can't fix that from Node.js, so we tell them to cd and run init again
+        log.newline();
+        log.success("Project deleted. To create a new project:");
+        log.newline();
+        console.log(`  ${colors.accent(`cd ${parentDir}`)}`);
+        console.log(`  ${colors.accent(`ensemble conductor init my-project`)}`);
+        log.newline();
+        return; // Don't continue - user needs to cd first
+      } else if (action === "new") {
+        // Create new project as sibling (in parent directory of existing project)
+        const parentDir = resolve(projectRoot!, "..");
+        process.chdir(parentDir);
+        log.dim(`📂 ${parentDir}`);
+        // Fall through - the project name prompt will handle it
+      }
+    } else {
+      // Non-interactive without --force: block
+      log.newline();
+      log.warn(
+        `You're inside an existing project: ${colors.accent(projectName)}`,
+      );
+      log.dim("Use --force to reinstall templates at project root.");
+      log.newline();
+      return;
+    }
+  }
 
   let product: Product = preselectedProduct || "conductor";
 
   if (!preselectedProduct && interactive) {
+    // Build available products list
     const availableProducts = Object.entries(PRODUCTS)
       .filter(([_, config]) => config.available)
       .map(([key, config]) => ({
@@ -455,12 +872,33 @@ export async function initWizard(
         disabled: true,
       }));
 
-    product = await promptSelect<Product>("What would you like to create?", [
-      ...availableProducts,
-      ...comingSoon,
-    ]);
+    // Build choices
+    type WizardChoice = Product | "exit";
+    const choices: Array<{
+      title: string;
+      value: WizardChoice;
+      disabled?: boolean;
+    }> = [
+      ...availableProducts.map((p) => ({
+        ...p,
+        value: p.value as WizardChoice,
+      })),
+      ...comingSoon.map((p) => ({ ...p, value: p.value as WizardChoice })),
+      { title: colors.dim("Exit"), value: "exit" as WizardChoice },
+    ];
 
-    // Handle coming soon products with specific messaging
+    const choice = await promptSelect<WizardChoice>(
+      "What would you like to create?",
+      choices,
+    );
+
+    if (choice === "exit") {
+      return;
+    }
+
+    product = choice as Product;
+
+    // Handle coming soon products
     if (!PRODUCTS[product].available) {
       if (product === "chamber") {
         showChamberComingSoon();
@@ -470,7 +908,7 @@ export async function initWizard(
       return;
     }
 
-    // Show confirmation line (NOT a second banner)
+    // Show confirmation line
     console.log(
       `${colors.success("✔")} ${PRODUCTS[product].name} - ${PRODUCTS[product].description}`,
     );
@@ -481,65 +919,224 @@ export async function initWizard(
   // Step 3: Project name
   // ─────────────────────────────────────────────────────────────────────────
 
-  let projectName = `my-${product}-project`;
+  // Re-capture cwd in case it changed (e.g., reinit changed to project root)
+  const currentCwd = process.cwd();
 
-  if (interactive) {
-    projectName = await promptText("Project name:", projectName, {
-      validate: (value) => {
-        if (!value.trim()) return "Project name is required";
-        if (!/^[a-z0-9-_]+$/i.test(value)) {
-          return "Use only letters, numbers, dashes, and underscores";
+  // Check if current directory is empty (for "." support)
+  const cwdIsEmpty = isDirectoryEmpty(currentCwd);
+  const cwdName = basename(currentCwd);
+
+  // Use provided project name, or default to my-{product}-project
+  // "." is supported but not the default - users should explicitly choose it
+  let projectName = options.projectName || `my-${product}-project`;
+
+  // Only prompt if no project name was provided via CLI and we're interactive
+  if (!options.projectName && interactive) {
+    const defaultName = `my-${product}-project`;
+
+    // Loop until we get a valid name or user confirms overwrite
+    let confirmed = false;
+    while (!confirmed) {
+      projectName = await promptText(`Project name:`, defaultName, {
+        validate: (value) => {
+          if (!value.trim()) return "Project name is required";
+
+          // Special case: "." means use current directory (always valid syntactically)
+          if (value === ".") {
+            return true;
+          }
+
+          if (!/^[a-z0-9-_]+$/i.test(value)) {
+            return "Use only letters, numbers, dashes, and underscores";
+          }
+          // Allow any valid name - we'll check for existing directory after
+          return true;
+        },
+      });
+
+      // Check if selected directory needs overwrite confirmation
+      const selectedTargetDir =
+        projectName === "." ? currentCwd : resolve(currentCwd, projectName);
+      if (!isDirectoryEmpty(selectedTargetDir)) {
+        // Directory exists - ask for confirmation
+        log.warn(
+          `Directory '${selectedTargetDir}' already exists and is not empty`,
+        );
+        const shouldOverwrite = await promptConfirm(
+          "Overwrite existing files?",
+          false, // default to No for safety
+        );
+
+        if (shouldOverwrite) {
+          confirmed = true;
+          // Set force flag so downstream checks don't block
+          options.force = true;
+        } else {
+          // User said no - loop back to ask for project name again
+          log.newline();
+          continue;
         }
-        const targetDir = resolve(process.cwd(), value);
-        if (existsSync(targetDir) && !isDirectoryEmpty(targetDir)) {
-          return `Directory '${value}' already exists and is not empty`;
-        }
-        return true;
-      },
-    });
+      } else {
+        confirmed = true;
+      }
+    }
+  } else if (options.projectName) {
+    // Validate provided project name
+    if (options.projectName === ".") {
+      if (!cwdIsEmpty && !options.force) {
+        log.error(`Current directory '${currentCwd}' is not empty`);
+        log.dim("Use --force to overwrite existing files");
+        return;
+      }
+    } else {
+      if (!/^[a-z0-9-_]+$/i.test(options.projectName)) {
+        log.error(
+          "Project name must use only letters, numbers, dashes, and underscores",
+        );
+        return;
+      }
+      const targetDir = resolve(currentCwd, options.projectName);
+      if (
+        existsSync(targetDir) &&
+        !isDirectoryEmpty(targetDir) &&
+        !options.force
+      ) {
+        log.error(`Directory '${targetDir}' already exists and is not empty`);
+        log.dim("Use --force to overwrite existing files");
+        return;
+      }
+    }
   }
 
   log.newline();
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 4: Detect package manager
+  // Step 4: Project setup type (Full/Starter/Basic) - Conductor only
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Determine setup type
+  // - CLI flags take precedence
+  // - --examples / --no-examples maps to full/starter
+  // - Default to "full" (recommended)
+  let setupType: SetupType = options.setup || "full";
+
+  // Handle --examples / --no-examples flags
+  if (options.examples === true) {
+    setupType = "full";
+  } else if (options.examples === false) {
+    setupType = "starter";
+  }
+
+  // Only prompt for Conductor (templates only exist for Conductor currently)
+  if (
+    product === "conductor" &&
+    !options.setup &&
+    options.examples === undefined &&
+    interactive
+  ) {
+    const setupChoices: Array<{
+      title: string;
+      value: SetupType;
+      description?: string;
+    }> = [
+      {
+        title: "Full",
+        value: "full",
+        description: "Template + example agents & ensembles (recommended)",
+      },
+      {
+        title: "Starter",
+        value: "starter",
+        description: "Ready to code, no examples",
+      },
+      {
+        title: "Basic",
+        value: "basic",
+        description: "Minimal stub (manual setup)",
+      },
+    ];
+
+    setupType = await promptSelect<SetupType>("Project setup:", setupChoices);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Step 5: Detect package manager
   // ─────────────────────────────────────────────────────────────────────────
 
   const pm = options.packageManager || detectPackageManager();
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Step 5: Create project structure
+  // Step 6: Create project and install dependencies
   // ─────────────────────────────────────────────────────────────────────────
 
-  log.info(`Creating ${PRODUCTS[product].name} project...`);
+  // Detect dev container early so we can configure scripts appropriately
+  const inDevContainer = isDevContainer();
 
-  const initResult = await createProjectStructure(projectName, product);
+  // Handle "." meaning current directory
+  const isCurrentDir = projectName === ".";
+  const targetDir = isCurrentDir
+    ? currentCwd
+    : resolve(currentCwd, projectName);
+  const displayName = isCurrentDir ? cwdName : projectName;
+  const packageName = isCurrentDir ? cwdName : projectName;
 
-  if (!initResult.success) {
-    log.error(`Failed to create project structure`);
-    log.newline();
-    log.plain(initResult.error || "Unknown error");
-    log.newline();
-    log.plain("To fix:");
-    console.log(`  ${colors.accent(`rm -rf ${projectName}`)}`);
-    console.log(`  ${colors.accent(`ensemble ${product} init ${projectName}`)}`);
-    return; // FAIL FAST - don't continue
-  }
+  // Different flows for different setup types
+  if (setupType === "basic" || product !== "conductor") {
+    // ─────────────────────────────────────────────────────────────────────
+    // BASIC MODE: Create minimal structure, then install
+    // ─────────────────────────────────────────────────────────────────────
 
-  log.success("Created project structure");
+    log.info(`Creating ${PRODUCTS[product].name} project...`);
 
-  // Show files created
-  if (initResult.files) {
-    for (const file of initResult.files) {
-      showNestedSuccess(file);
+    const initResult = await createBasicProjectStructure(projectName, product, {
+      inDevContainer,
+      force: options.force,
+    });
+
+    if (!initResult.success) {
+      log.error(`Failed to create project structure`);
+      log.newline();
+      log.plain(initResult.error || "Unknown error");
+      log.newline();
+      log.plain("To fix:");
+      console.log(`  ${colors.accent(`rm -rf ${projectName}`)}`);
+      console.log(
+        `  ${colors.accent(`ensemble ${product} init ${projectName}`)}`,
+      );
+      return; // FAIL FAST - don't continue
     }
+
+    log.success("Created project structure");
+
+    // Show files created
+    if (initResult.files) {
+      for (const file of initResult.files) {
+        showNestedSuccess(file);
+      }
+    }
+  } else {
+    // ─────────────────────────────────────────────────────────────────────
+    // FULL/STARTER MODE: Install first, then copy templates
+    // ─────────────────────────────────────────────────────────────────────
+
+    log.info(`Creating ${PRODUCTS[product].name} project...`);
+
+    // Create target directory
+    if (!isCurrentDir && !existsSync(targetDir)) {
+      await mkdir(targetDir, { recursive: true });
+    }
+
+    // Check if directory is empty (skip if --force)
+    if (!isDirectoryEmpty(targetDir) && !options.force) {
+      log.error(`Directory '${targetDir}' is not empty`);
+      log.dim("Use --force to overwrite existing files");
+      return;
+    }
+
+    // Create minimal package.json for initial install
+    await createMinimalPackageJson(targetDir, packageName, product);
+    log.success("Created package.json");
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Step 6: Install dependencies (silent with clean output)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const targetDir = resolve(process.cwd(), projectName);
 
   if (!options.skipInstall) {
     log.newline();
@@ -553,7 +1150,9 @@ export async function initWizard(
       log.plain(installResult.error || "Unknown error");
       log.newline();
       log.plain("To retry:");
-      console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+      if (!isCurrentDir) {
+        console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+      }
       console.log(`  ${colors.accent(`${pm} install`)}`);
       allSucceeded = false;
       // Continue to show next steps, but don't show success box
@@ -566,10 +1165,106 @@ export async function initWizard(
           showNestedSuccess(`${pkg.name}@${pkg.version}`);
         }
       }
+
+      // ─────────────────────────────────────────────────────────────────────
+      // FULL/STARTER MODE: Copy templates from installed conductor package
+      // ─────────────────────────────────────────────────────────────────────
+
+      if (
+        (setupType === "full" || setupType === "starter") &&
+        product === "conductor"
+      ) {
+        log.newline();
+        const templateSpinner = createSpinner(
+          "Copying project templates...",
+        ).start();
+
+        const templatePath = getTemplatePath(targetDir);
+
+        if (!templatePath) {
+          templateSpinner.error({
+            text: "Template not found in installed package",
+          });
+          log.newline();
+          log.warn(
+            "Could not find templates in @ensemble-edge/conductor package.",
+          );
+          log.dim(
+            "The project will work but you may need to set up files manually.",
+          );
+          allSucceeded = false;
+        } else {
+          try {
+            const copiedFiles = await copyTemplateDirectory(
+              templatePath,
+              targetDir,
+              {
+                includeExamples: setupType === "full",
+                projectName: packageName,
+                inDevContainer,
+              },
+            );
+
+            templateSpinner.success({ text: "Copied project templates" });
+
+            // Show summary of what was copied
+            const fileCount = copiedFiles.filter(
+              (f) => !f.endsWith("/"),
+            ).length;
+            const dirCount = copiedFiles.filter((f) => f.endsWith("/")).length;
+            showNestedSuccess(`${fileCount} files, ${dirCount} directories`);
+
+            if (setupType === "full") {
+              showNestedSuccess("Includes example agents & ensembles");
+            }
+
+            if (inDevContainer) {
+              showNestedSuccess("Dev container networking configured");
+            }
+
+            // Run a second install to pick up template's devDependencies (vite, etc.)
+            // The initial install only had the minimal package.json with conductor
+            // Now that we've copied the template's full package.json, we need to install again
+            log.newline();
+            const devDepsSpinner = createSpinner(
+              "Installing dev dependencies...",
+            ).start();
+            const devDepsResult = await installDependencies(targetDir, pm);
+
+            if (!devDepsResult.success) {
+              devDepsSpinner.error({
+                text: "Failed to install dev dependencies",
+              });
+              log.newline();
+              log.plain(devDepsResult.error || "Unknown error");
+              log.dim("Run install manually to complete setup");
+              allSucceeded = false;
+            } else {
+              devDepsSpinner.success({ text: "Installed dev dependencies" });
+            }
+          } catch (error) {
+            templateSpinner.error({ text: "Failed to copy templates" });
+            log.newline();
+            log.plain((error as Error).message);
+            allSucceeded = false;
+          }
+        }
+      }
     }
   } else {
     log.newline();
     log.dim("Skipping install (--skip-install)");
+
+    // Warn if full/starter mode without install
+    if (
+      (setupType === "full" || setupType === "starter") &&
+      product === "conductor"
+    ) {
+      log.warn("Templates will not be copied when using --skip-install");
+      log.dim(
+        "Run install manually, then copy templates from node_modules/@ensemble-edge/conductor/catalog/cloud/cloudflare/templates/",
+      );
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -589,20 +1284,33 @@ export async function initWizard(
 
   if (allSucceeded) {
     // Show success box
-    console.log(successBox(`${projectName} created successfully!`));
+    console.log(successBox(`${displayName} created successfully!`));
   } else {
     // Show partial success
-    log.warn(`${projectName} created with warnings`);
+    log.warn(`${displayName} created with warnings`);
   }
 
   log.newline();
   log.plain(colors.bold("Next steps:"));
   log.newline();
-  console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+
+  // Only show "cd" if we created a subdirectory
+  if (!isCurrentDir) {
+    console.log(`  ${colors.accent(`cd ${projectName}`)}`);
+  }
   if (options.skipInstall || !allSucceeded) {
     console.log(`  ${colors.accent(`${pm} install`)}`);
   }
+
+  // Show dev command (scripts are already configured with --ip 0.0.0.0 if in dev container)
   console.log(`  ${colors.accent(`${pm} run dev`)}`);
+
+  // Show helpful tip if in dev container
+  if (inDevContainer && product === "conductor") {
+    log.dim(
+      "  💡 Dev container detected — scripts configured for port forwarding",
+    );
+  }
   log.newline();
 
   if (product === "conductor") {
@@ -618,106 +1326,36 @@ export async function initWizard(
 // Conductor Optional Setup
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Run optional setup wizards for Conductor projects
+ *
+ * Uses shared wizards from ../wizards/ to stay in sync with configure command.
+ */
 async function conductorOptionalSetup(
   targetDir: string,
   _pm: PackageManager,
 ): Promise<void> {
-  // Cloudflare auth
-  const setupCloudflare = await promptConfirm(
-    "Configure Cloudflare authentication?",
-    true,
-  );
-
-  if (setupCloudflare) {
-    log.newline();
-    const spinner = createSpinner("Checking Cloudflare auth...").start();
-
-    const isLoggedIn = await checkWranglerAuth();
-
-    if (isLoggedIn) {
-      spinner.success({ text: "Already logged in to Cloudflare" });
-    } else {
-      spinner.stop();
-      log.info("Opening browser for Cloudflare login...");
-      await runCommand("wrangler", ["login"], targetDir);
-    }
-  }
+  // 1. Cloudflare auth
+  await authWizard({
+    cwd: targetDir,
+    skipPrompt: false, // Show "Configure Cloudflare authentication?" prompt
+  });
 
   log.newline();
 
-  // AI Provider
-  const setupAI = await promptConfirm("Configure AI provider?", true);
-
-  if (setupAI) {
-    const provider = await promptSelect("Select AI provider:", [
-      { title: "Cloudflare Workers AI (no API key needed)", value: "cloudflare" },
-      { title: "OpenAI", value: "openai" },
-      { title: "Anthropic", value: "anthropic" },
-      { title: "Groq", value: "groq" },
-      { title: "Skip for now", value: "skip" },
-    ]);
-
-    if (provider === "cloudflare") {
-      // Enable AI binding in wrangler.toml and index.ts
-      await enableCloudflareAI(targetDir);
-      log.success("Enabled Cloudflare Workers AI");
-    } else if (provider !== "skip") {
-      log.dim(`Configure ${provider} API key in .dev.vars or wrangler secret`);
-    }
-  }
+  // 2. AI Provider
+  await aiWizard({
+    cwd: targetDir,
+    showInitialPrompt: true, // Show "Configure AI provider?" prompt
+    showSuccessBox: false, // Don't show big success box during init flow
+  });
 
   log.newline();
 
-  // Cloud connection
-  const setupCloud = await promptConfirm("Connect to Ensemble Cloud?", false);
-
-  if (setupCloud) {
-    log.dim("Run 'ensemble cloud init' to configure cloud connection");
-  } else {
-    log.info("No problem! Connect anytime: ensemble cloud init");
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function checkWranglerAuth(): Promise<boolean> {
-  const result = await runCommandSilent("wrangler", ["whoami"]);
-  return result.success && !result.stdout.includes("Not logged in");
-}
-
-/**
- * Enable Cloudflare Workers AI by uncommenting the AI binding in wrangler.toml and index.ts
- */
-async function enableCloudflareAI(targetDir: string): Promise<void> {
-  // Update wrangler.toml - uncomment AI binding
-  const wranglerPath = resolve(targetDir, "wrangler.toml");
-  try {
-    let wranglerContent = await readFile(wranglerPath, "utf-8");
-    wranglerContent = wranglerContent
-      .replace(
-        "# Uncomment to enable Cloudflare Workers AI\n# Run: ensemble conductor init --configure-ai\n# Or manually uncomment after running: wrangler login\n# [ai]\n# binding = \"AI\"",
-        "[ai]\nbinding = \"AI\"",
-      );
-    await writeFile(wranglerPath, wranglerContent);
-  } catch {
-    // File might not exist or have different format, skip
-  }
-
-  // Update index.ts - uncomment AI type
-  const indexPath = resolve(targetDir, "src/index.ts");
-  try {
-    let indexContent = await readFile(indexPath, "utf-8");
-    indexContent = indexContent
-      .replace(
-        "// Uncomment when AI binding is enabled in wrangler.toml\n  // AI: Ai;",
-        "AI: Ai;",
-      );
-    await writeFile(indexPath, indexContent);
-  } catch {
-    // File might not exist or have different format, skip
-  }
+  // 3. Cloud connection
+  await cloudWizard({
+    cwd: targetDir,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

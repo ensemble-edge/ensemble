@@ -17,6 +17,7 @@ import {
   chamberInit,
   cloudInit,
 } from "./commands/init.js";
+import { configure, showConfigureHelp } from "./commands/configure.js";
 
 /**
  * Ensemble products - handled internally or via subprocess
@@ -33,16 +34,69 @@ function isEnsembleProduct(cmd: string): cmd is EnsembleProduct {
 
 /**
  * Parse init options from args
+ *
+ * Supports:
+ *   ensemble conductor init my-project
+ *   ensemble conductor init my-project -y
+ *   ensemble conductor init -y
+ *   ensemble conductor init --setup full
+ *   ensemble conductor init --no-examples
  */
 function parseInitOptions(args: string[]): {
   yes: boolean;
   skipInstall: boolean;
+  force: boolean;
   packageManager?: "npm" | "pnpm" | "yarn" | "bun";
+  projectName?: string;
+  setup?: "full" | "starter" | "basic";
+  examples?: boolean;
 } {
+  // Find the first arg that isn't a flag (doesn't start with -)
+  const projectName = args.find((arg) => !arg.startsWith("-"));
+
+  // Parse --setup flag
+  let setup: "full" | "starter" | "basic" | undefined;
+  const setupIndex = args.findIndex((a) => a === "--setup");
+  if (setupIndex !== -1 && args[setupIndex + 1]) {
+    const value = args[setupIndex + 1];
+    if (value === "full" || value === "starter" || value === "basic") {
+      setup = value;
+    }
+  }
+
+  // Parse --examples / --no-examples flags
+  let examples: boolean | undefined;
+  if (args.includes("--examples")) {
+    examples = true;
+  } else if (args.includes("--no-examples")) {
+    examples = false;
+  }
+
+  // Parse --package-manager flag
+  let packageManager: "npm" | "pnpm" | "yarn" | "bun" | undefined;
+  const pmIndex = args.findIndex(
+    (a) => a === "--package-manager" || a === "--pm",
+  );
+  if (pmIndex !== -1 && args[pmIndex + 1]) {
+    const value = args[pmIndex + 1];
+    if (
+      value === "npm" ||
+      value === "pnpm" ||
+      value === "yarn" ||
+      value === "bun"
+    ) {
+      packageManager = value;
+    }
+  }
+
   return {
     yes: args.includes("-y") || args.includes("--yes"),
     skipInstall: args.includes("--skip-install"),
-    packageManager: undefined, // Could parse --package-manager
+    force: args.includes("--force") || args.includes("-f"),
+    packageManager,
+    projectName,
+    setup,
+    examples,
   };
 }
 
@@ -56,6 +110,12 @@ export async function route(argv: string[]): Promise<void> {
   // This enables: npx @ensemble-edge/ensemble
   if (!cmd) {
     await initWizard();
+    return;
+  }
+
+  // Handle configure command
+  if (cmd === "configure") {
+    await routeConfigure(args);
     return;
   }
 
@@ -142,7 +202,7 @@ async function runConductor(args: string[]): Promise<void> {
 function showConductorHelp(): void {
   banners.conductor();
   console.log(`${colors.bold("Commands:")}
-  init            Create a new Conductor project
+  init [name]     Create a new Conductor project
   dev             Start development server
   deploy          Deploy to production
   validate        Validate configuration
@@ -150,9 +210,25 @@ function showConductorHelp(): void {
   docs            Generate API documentation
   test            Run tests
 
+${colors.bold("Init Options:")}
+  --setup <type>  Project setup: full, starter, basic (default: full)
+  --examples      Include example agents & ensembles (same as --setup full)
+  --no-examples   Template only, no examples (same as --setup starter)
+  --skip-install  Skip npm install
+  --pm <manager>  Package manager: npm, pnpm, yarn, bun
+  -f, --force     Overwrite existing directory
+  -y, --yes       Use defaults, skip prompts
+
+${colors.bold("Setup Types:")}
+  full     Template + example agents & ensembles (recommended)
+  starter  Ready to code, no examples
+  basic    Minimal stub for manual setup
+
 ${colors.bold("Examples:")}
   ${colors.accent("npx @ensemble-edge/ensemble")}
   ${colors.accent("ensemble conductor init my-project")}
+  ${colors.accent("ensemble conductor init --setup starter")}
+  ${colors.accent("ensemble conductor init --no-examples")}
   ${colors.accent("npm run dev")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/conductor")}
@@ -167,12 +243,13 @@ async function runEdgit(args: string[]): Promise<void> {
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
     banners.edgit();
     console.log(`${colors.bold("Commands:")}
-  init            Create a new Edgit project
+  init [name]     Create a new Edgit project
   tag             Manage component versions
   deploy          Deploy components
 
 ${colors.bold("Examples:")}
   ${colors.accent("npx @ensemble-edge/ensemble")}
+  ${colors.accent("ensemble edgit init my-project")}
   ${colors.accent("ensemble edgit tag create prompt v1.0.0")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/edgit")}
@@ -223,6 +300,52 @@ ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/chamber")}
  */
 async function runCloud(args: string[]): Promise<void> {
   await routeCloudCommand(args);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Configure Command
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Route configure subcommands
+ */
+async function routeConfigure(args: string[]): Promise<void> {
+  const [subCmd, ...restArgs] = args;
+
+  // Show help
+  if (subCmd === "--help" || subCmd === "-h") {
+    showConfigureHelp();
+    return;
+  }
+
+  // Parse options
+  const options = {
+    yes: restArgs.includes("-y") || restArgs.includes("--yes"),
+    provider: parseProvider(restArgs),
+  };
+
+  // Route to configure handler
+  await configure(subCmd, options);
+}
+
+/**
+ * Parse --provider flag
+ */
+function parseProvider(
+  args: string[],
+): "anthropic" | "openai" | "cloudflare" | undefined {
+  const providerIndex = args.findIndex((a) => a === "--provider");
+  if (providerIndex !== -1 && args[providerIndex + 1]) {
+    const provider = args[providerIndex + 1];
+    if (
+      provider === "anthropic" ||
+      provider === "openai" ||
+      provider === "cloudflare"
+    ) {
+      return provider;
+    }
+  }
+  return undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

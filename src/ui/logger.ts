@@ -35,7 +35,7 @@ const ASCII_BANNERS = {
 `,
 
   ensemble: `
-   ______                           __    __
+   ______                          __    __
   / ____/___  ________  ____ ___  / /_  / /__
  / __/ / __ \\/ ___/ _ \\/ __ \`__ \\/ __ \\/ / _ \\
 / /___/ / / (__  )  __/ / / / / / /_/ / /  __/
@@ -129,12 +129,12 @@ export const banners = {
   ensemble: () => {
     if (useAsciiArt()) {
       console.log(colors.primary(ASCII_BANNERS.ensemble));
-      console.log(colors.dim("by Ensemble"));
+      console.log(colors.dim("Ensemble CLI — by Ensemble-Edge"));
       console.log("");
     } else {
       console.log("");
-      console.log(`  ${icons.ensemble} ${colors.primaryBold("Ensemble")}`);
-      console.log(colors.dim("  AI orchestration for Cloudflare Workers"));
+      console.log(`  ${icons.ensemble} ${colors.primaryBold("Ensemble CLI")}`);
+      console.log(colors.dim("  by Ensemble-Edge"));
       console.log("");
     }
   },
@@ -142,7 +142,7 @@ export const banners = {
   conductor: () => {
     if (useAsciiArt()) {
       console.log(colors.primary(ASCII_BANNERS.conductor));
-      console.log(colors.dim("by Ensemble"));
+      console.log(colors.dim("by Ensemble-Edge"));
       console.log("");
     } else {
       console.log("");
@@ -155,7 +155,7 @@ export const banners = {
   edgit: () => {
     if (useAsciiArt()) {
       console.log(colors.primary(ASCII_BANNERS.edgit));
-      console.log(colors.dim("by Ensemble"));
+      console.log(colors.dim("by Ensemble-Edge"));
       console.log("");
     } else {
       console.log("");
@@ -176,7 +176,7 @@ export const banners = {
   cloud: () => {
     if (useAsciiArt()) {
       console.log(colors.primary(ASCII_BANNERS.cloud));
-      console.log(colors.dim("by Ensemble"));
+      console.log(colors.dim("by Ensemble-Edge"));
       console.log("");
     } else {
       console.log("");

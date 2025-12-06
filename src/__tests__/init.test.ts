@@ -153,6 +153,16 @@ describe("init wizard", () => {
         expect.any(Object),
       );
     });
+
+    it("should use provided project name", async () => {
+      await conductorInit({ projectName: "custom-project-name" });
+
+      // Should use the custom name in package.json path
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("custom-project-name"),
+        expect.stringContaining("@ensemble-edge/conductor"),
+      );
+    });
   });
 
   describe("edgitInit", () => {

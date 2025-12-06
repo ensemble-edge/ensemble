@@ -4,6 +4,7 @@
  * Wraps the `prompts` library with ensemble styling
  */
 
+import { existsSync } from "node:fs";
 import prompts from "prompts";
 import { colors } from "./colors.js";
 
@@ -214,4 +215,43 @@ export function isCI(): boolean {
     process.env.JENKINS_URL ||
     process.env.BUILDKITE
   );
+}
+
+/**
+ * Check if running inside a dev container or remote container
+ *
+ * Detects:
+ * - VS Code Dev Containers (REMOTE_CONTAINERS=true)
+ * - GitHub Codespaces (CODESPACES=true)
+ * - Generic Docker containers (/.dockerenv exists)
+ * - Podman containers (/run/.containerenv exists)
+ * - Container env var set by runtime
+ */
+export function isDevContainer(): boolean {
+  // VS Code Dev Container or Codespaces (most reliable)
+  if (
+    process.env.REMOTE_CONTAINERS === "true" ||
+    process.env.CODESPACES === "true"
+  ) {
+    return true;
+  }
+
+  // Generic container detection via env
+  if (
+    process.env.container === "docker" ||
+    process.env.container === "podman"
+  ) {
+    return true;
+  }
+
+  // Check for container marker files (fallback)
+  try {
+    if (existsSync("/.dockerenv") || existsSync("/run/.containerenv")) {
+      return true;
+    }
+  } catch {
+    // Ignore errors - graceful fallback
+  }
+
+  return false;
 }

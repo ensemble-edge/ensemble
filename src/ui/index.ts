@@ -67,5 +67,6 @@ export {
   promptMultiSelect,
   isInteractive,
   isCI,
+  isDevContainer,
 } from "./prompts.js";
 export type { Choice } from "./prompts.js";

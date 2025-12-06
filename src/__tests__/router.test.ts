@@ -152,6 +152,26 @@ describe("router", () => {
       );
     });
 
+    it("should pass project name argument to conductor init", async () => {
+      await route(["conductor", "init", "my-custom-project"]);
+
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("my-custom-project"),
+        expect.stringContaining("@ensemble-edge/conductor"),
+      );
+    });
+
+    it("should pass project name with flags to conductor init", async () => {
+      await route(["conductor", "init", "my-custom-project", "-y"]);
+
+      expect(banners.ensemble).toHaveBeenCalled();
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining("my-custom-project"),
+        expect.stringContaining("@ensemble-edge/conductor"),
+      );
+    });
+
     it("should run edgit init wizard", async () => {
       await route(["edgit", "init"]);
 

@@ -9,10 +9,10 @@
  * - ensemble <wrangler> → Passthrough to wrangler
  */
 
-import { version } from "./version.js";
 import { colors, banners, log } from "./ui/index.js";
 import { route } from "./router.js";
 import { showEcosystemStatus } from "./discovery.js";
+import { showVersion } from "./commands/version.js";
 
 /**
  * Print the main help message
@@ -27,8 +27,11 @@ ${colors.bold("Products:")}
   chamber       Edge data lake ${colors.dim("(coming soon)")}
   cloud         Managed platform
 
+${colors.bold("Commands:")}
+  configure     Configure AI providers, secrets, and more
+
 ${colors.bold("Options:")}
-  -v, --version  Show version
+  -v, --version  Show version and check for updates
   -h, --help     Show help
 
 ${colors.bold("Wrangler (passthrough):")}
@@ -40,6 +43,7 @@ ${colors.bold("Getting Started:")}
 
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
+  ${colors.accent("ensemble conductor init --setup starter")}
   ${colors.accent("ensemble edgit tag create prompt v1.0.0")}
   ${colors.accent("pnpm run dev")}
   ${colors.accent("pnpm run deploy")}
@@ -63,7 +67,7 @@ export async function run(argv: string[] = process.argv): Promise<void> {
   }
 
   if (args[0] === "--version" || args[0] === "-v") {
-    console.log(`ensemble v${version}`);
+    await showVersion();
     return;
   }
 
