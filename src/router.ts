@@ -18,6 +18,11 @@ import {
   cloudInit,
 } from "./commands/init.js";
 import { configure, showConfigureHelp } from "./commands/configure.js";
+import {
+  conductorStatus,
+  showConductorHelp as conductorHelp,
+} from "./commands/conductor.js";
+import { edgitStatus, showEdgitHelp as edgitHelp } from "./commands/edgit.js";
 
 /**
  * Ensemble products - handled internally or via subprocess
@@ -180,16 +185,24 @@ async function routeProduct(
 
 /**
  * Run conductor commands (non-init)
- * Delegates to local conductor CLI if installed, or npx
+ * Handles status internally, delegates others to local conductor CLI or npx
  */
 async function runConductor(args: string[]): Promise<void> {
+  const [subCmd, ...subArgs] = args;
+
   // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    showConductorHelp();
+  if (!subCmd || subCmd === "--help" || subCmd === "-h") {
+    conductorHelp();
     return;
   }
 
-  // Delegate to conductor CLI
+  // Handle status command internally
+  if (subCmd === "status") {
+    await conductorStatus(subArgs);
+    return;
+  }
+
+  // Delegate other commands to conductor CLI
   await spawnCommand("npx", ["@ensemble-edge/conductor", ...args], {
     notFoundMessage:
       "Conductor not found. Run 'ensemble conductor init' to create a project.",
@@ -197,67 +210,25 @@ async function runConductor(args: string[]): Promise<void> {
 }
 
 /**
- * Show conductor help
- */
-function showConductorHelp(): void {
-  banners.conductor();
-  console.log(`${colors.bold("Commands:")}
-  init [name]     Create a new Conductor project
-  dev             Start development server
-  deploy          Deploy to production
-  validate        Validate configuration
-  exec            Execute agents
-  docs            Generate API documentation
-  test            Run tests
-
-${colors.bold("Init Options:")}
-  --setup <type>  Project setup: full, starter, basic (default: full)
-  --examples      Include example agents & ensembles (same as --setup full)
-  --no-examples   Template only, no examples (same as --setup starter)
-  --skip-install  Skip npm install
-  --pm <manager>  Package manager: npm, pnpm, yarn, bun
-  -f, --force     Overwrite existing directory
-  -y, --yes       Use defaults, skip prompts
-
-${colors.bold("Setup Types:")}
-  full     Template + example agents & ensembles (recommended)
-  starter  Ready to code, no examples
-  basic    Minimal stub for manual setup
-
-${colors.bold("Examples:")}
-  ${colors.accent("npx @ensemble-edge/ensemble")}
-  ${colors.accent("ensemble conductor init my-project")}
-  ${colors.accent("ensemble conductor init --setup starter")}
-  ${colors.accent("ensemble conductor init --no-examples")}
-  ${colors.accent("npm run dev")}
-
-${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/conductor")}
-`);
-}
-
-/**
- * Run edgit commands
+ * Run edgit commands (non-init)
+ * Handles status internally, delegates others to edgit CLI
  */
 async function runEdgit(args: string[]): Promise<void> {
+  const [subCmd, ...subArgs] = args;
+
   // Show help if no subcommand
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-    banners.edgit();
-    console.log(`${colors.bold("Commands:")}
-  init [name]     Create a new Edgit project
-  tag             Manage component versions
-  deploy          Deploy components
-
-${colors.bold("Examples:")}
-  ${colors.accent("npx @ensemble-edge/ensemble")}
-  ${colors.accent("ensemble edgit init my-project")}
-  ${colors.accent("ensemble edgit tag create prompt v1.0.0")}
-
-${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/edgit")}
-`);
+  if (!subCmd || subCmd === "--help" || subCmd === "-h") {
+    edgitHelp();
     return;
   }
 
-  // Delegate to edgit CLI
+  // Handle status command internally
+  if (subCmd === "status") {
+    await edgitStatus(subArgs);
+    return;
+  }
+
+  // Delegate other commands to edgit CLI
   await spawnCommand("npx", ["edgit", ...args], {
     notFoundMessage:
       "Edgit not found. Run 'ensemble edgit init' to create a project.",

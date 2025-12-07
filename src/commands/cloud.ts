@@ -18,12 +18,20 @@ import {
   banners,
   createSpinner,
   successBox,
+  promptConfirm,
+  isInteractive,
 } from "../ui/index.js";
 import { showInitHints } from "../discovery.js";
 
 interface CloudConfig {
   enabled: boolean;
   github_repo?: string;
+}
+
+interface ConductorCloudConfig {
+  workerUrl?: string;
+  projectId?: string;
+  stealthMode?: boolean;
 }
 
 /**
@@ -123,6 +131,70 @@ async function storeSecret(
  */
 function hasWranglerConfig(): boolean {
   return existsSync("wrangler.toml") || existsSync("wrangler.json");
+}
+
+/**
+ * Read workerUrl and stealthMode from conductor.config.ts
+ */
+async function readConductorCloudConfig(): Promise<ConductorCloudConfig | null> {
+  const configFiles = ["conductor.config.ts", "conductor.config.js"];
+
+  for (const configFile of configFiles) {
+    if (!existsSync(configFile)) continue;
+
+    try {
+      const content = await readFile(configFile, "utf-8");
+
+      // Extract workerUrl from cloud config section
+      // Matches: workerUrl: 'https://...' or workerUrl: "https://..."
+      const workerUrlMatch = content.match(/workerUrl\s*:\s*['"]([^'"]+)['"]/);
+
+      // Extract projectId
+      const projectIdMatch = content.match(/projectId\s*:\s*['"]([^'"]+)['"]/);
+
+      // Extract stealthMode from security config section
+      // Matches: stealthMode: true
+      const stealthModeMatch = content.match(/stealthMode\s*:\s*true/);
+
+      if (workerUrlMatch || projectIdMatch || stealthModeMatch) {
+        return {
+          workerUrl: workerUrlMatch?.[1],
+          projectId: projectIdMatch?.[1],
+          stealthMode: !!stealthModeMatch,
+        };
+      }
+    } catch {
+      // Continue to next file
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Ping the worker's health endpoint
+ */
+async function pingWorkerHealth(
+  workerUrl: string,
+): Promise<{ ok: boolean; version?: string; error?: string }> {
+  try {
+    const healthUrl = `${workerUrl.replace(/\/$/, "")}/cloud/health`;
+    const response = await fetch(healthUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { version?: string };
+      return { ok: true, version: data.version };
+    } else {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { ok: false, error: message };
+  }
 }
 
 /**
@@ -283,26 +355,91 @@ To connect Ensemble Cloud:
  * Show cloud connection status
  */
 export async function cloudStatus(args: string[]): Promise<void> {
-  banners.cloud();
-  console.log("");
-
   const env = parseEnv(args);
   const isJson = args.includes("--json");
+  const isCompact = args.includes("--compact");
 
-  // Check for wrangler.toml
+  // Check for wrangler.toml (Conductor project required)
   if (!hasWranglerConfig()) {
     if (isJson) {
       console.log(
-        JSON.stringify({ enabled: false, error: "No wrangler.toml" }),
+        JSON.stringify({
+          initialized: false,
+          enabled: false,
+          error: "No wrangler.toml - Conductor project required",
+        }),
       );
-    } else {
-      log.error("No wrangler.toml found.");
+      return;
     }
+
+    if (isCompact) {
+      console.log("");
+      console.log(`${colors.primaryBold("☁️  Cloud Status")}`);
+      console.log("");
+      console.log(`Environment: ${env}`);
+      console.log(`Initialized: ${colors.dim("○")} No`);
+      console.log(`Project:     ${colors.dim("○")} No Conductor project`);
+      console.log("");
+      log.dim(
+        "Run `ensemble conductor init` first, then `ensemble cloud init`.",
+      );
+      console.log("");
+      return;
+    }
+
+    // Full mode
+    banners.cloud();
+    console.log(`${colors.primaryBold("☁️  Cloud Status")}`);
+    console.log("");
+    console.log(`Initialized: ${colors.dim("○")} No`);
+    console.log(`Project:     ${colors.dim("○")} No Conductor project found`);
+    console.log("");
+
+    // Cloud requires a Conductor project first
+    if (isInteractive()) {
+      log.warn("Cloud requires a Conductor project.");
+      const shouldInitConductor = await promptConfirm(
+        "Would you like to create a Conductor project first?",
+        true,
+      );
+
+      if (shouldInitConductor) {
+        console.log("");
+        const { conductorInit } = await import("./init.js");
+        await conductorInit({});
+        // After conductor init, offer cloud init
+        console.log("");
+        const shouldInitCloud = await promptConfirm(
+          "Would you like to set up cloud connection now?",
+          true,
+        );
+        if (shouldInitCloud) {
+          await cloudInit(args);
+        }
+        return;
+      }
+    } else {
+      log.dim("Cloud requires a Conductor project.");
+      log.dim(
+        "Run `ensemble conductor init` first, then `ensemble cloud init`.",
+      );
+    }
+    console.log("");
+    log.dim("Docs: https://docs.ensemble.ai/cloud");
     return;
   }
 
-  // Read cloud config
+  // Read cloud config from wrangler.toml
   const config = await readCloudConfig();
+
+  // Read conductor.config.ts for workerUrl
+  const conductorConfig = await readConductorCloudConfig();
+
+  // Health check
+  let health: { ok: boolean; version?: string; error?: string } | undefined;
+  if (conductorConfig?.workerUrl) {
+    health = await pingWorkerHealth(conductorConfig.workerUrl);
+  }
 
   if (isJson) {
     console.log(
@@ -310,28 +447,104 @@ export async function cloudStatus(args: string[]): Promise<void> {
         enabled: config?.enabled ?? false,
         environment: env,
         github_repo: config?.github_repo,
+        workerUrl: conductorConfig?.workerUrl,
+        stealthMode: conductorConfig?.stealthMode,
+        health,
       }),
     );
     return;
   }
 
-  console.log(colors.bold("Cloud Status"));
-  console.log("");
-  console.log(`  Environment:  ${colors.accent(env)}`);
+  // Display banner
+  banners.cloud();
 
-  if (config?.enabled) {
-    console.log(`  Status:       ${colors.success("✓ Enabled")}`);
-    if (config.github_repo) {
-      console.log(`  GitHub Repo:  ${colors.dim(config.github_repo)}`);
+  if (isCompact) {
+    // Compact mode
+    console.log(`${colors.primaryBold("☁️  Cloud Status")}`);
+    console.log("");
+    console.log(`Environment: ${env}`);
+    console.log(
+      `Status:      ${config?.enabled ? colors.success("✓") + " Enabled" : colors.dim("○") + " Not configured"}`,
+    );
+    if (conductorConfig?.workerUrl) {
+      const healthStatus = health?.ok
+        ? colors.success("✓") + (health.version ? ` (v${health.version})` : "")
+        : colors.error("✗") + (health?.error ? ` (${health.error})` : "");
+      console.log(
+        `Worker:      ${healthStatus} ${colors.accent(conductorConfig.workerUrl)}`,
+      );
     }
     console.log("");
+    return;
+  }
+
+  // Full mode with boxes
+  console.log(
+    successBox("☁️  Cloud Status", `Environment: ${colors.accent(env)}`),
+  );
+  console.log("");
+
+  console.log(colors.bold("Connection"));
+  if (config?.enabled) {
+    console.log(`  Status:         ${colors.success("✓ Enabled")}`);
+    if (config.github_repo) {
+      console.log(`  GitHub Repo:    ${colors.dim(config.github_repo)}`);
+    }
+  } else {
+    console.log(`  Status:         ${colors.dim("○ Not configured")}`);
+  }
+  console.log("");
+
+  console.log(colors.bold("Deployment"));
+  if (conductorConfig?.workerUrl) {
+    console.log(
+      `  Worker URL:     ${colors.accent(conductorConfig.workerUrl)}`,
+    );
+
+    if (health?.ok) {
+      console.log(
+        `  Health:         ${colors.success("✓")} Reachable${health.version ? colors.dim(` (v${health.version})`) : ""}`,
+      );
+    } else {
+      console.log(
+        `  Health:         ${colors.error("✗")} Not reachable ${colors.dim(`(${health?.error})`)}`,
+      );
+
+      // Show contextual tip if stealthMode is enabled and we got a 404
+      if (conductorConfig.stealthMode && health?.error?.includes("404")) {
+        log.dim(
+          "  Tip: stealthMode is enabled, which hides the health endpoint.",
+        );
+      }
+    }
+  } else {
+    console.log(`  Worker URL:     ${colors.dim("Not configured")}`);
+  }
+  console.log("");
+
+  if (config?.enabled) {
     log.dim("Key is stored as wrangler secret ENSEMBLE_CLOUD_KEY");
     log.dim("View with: wrangler secret list");
   } else {
-    console.log(`  Status:       ${colors.warning("○ Not configured")}`);
-    console.log("");
-    log.dim("Run `ensemble cloud init` to set up cloud connection.");
+    // Offer to initialize cloud if interactive
+    if (isInteractive()) {
+      const shouldInit = await promptConfirm(
+        "Would you like to set up cloud connection?",
+        true,
+      );
+
+      if (shouldInit) {
+        console.log("");
+        await cloudInit(args);
+        return;
+      }
+    } else {
+      log.dim("Run `ensemble cloud init` to set up cloud connection.");
+    }
   }
+
+  console.log("");
+  log.dim("Docs: https://docs.ensemble.ai/cloud");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -459,10 +672,12 @@ export function showCloudHelp(): void {
   console.log("  --env <env>     Target environment (default: production)");
   console.log("  -y, --yes       Skip confirmation prompts (rotate/disable)");
   console.log("  --json          Output as JSON (status only)");
+  console.log("  --compact       Compact single-line format (status only)");
   console.log("");
   console.log(colors.bold("Examples:"));
   console.log(colors.accent("  ensemble cloud init"));
   console.log(colors.accent("  ensemble cloud status"));
+  console.log(colors.accent("  ensemble cloud status --compact"));
   console.log(colors.accent("  ensemble cloud init --env staging"));
   console.log(colors.accent("  ensemble cloud rotate --yes"));
   console.log("");

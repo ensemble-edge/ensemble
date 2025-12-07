@@ -62,6 +62,11 @@ ensemble conductor --help
 # Initialize a new project
 ensemble conductor init [name]
 
+# Check project status
+ensemble conductor status
+ensemble conductor status --compact
+ensemble conductor status --json
+
 # Initialize with AI provider pre-selected
 ensemble conductor init my-project --provider anthropic
 
@@ -80,6 +85,14 @@ ensemble conductor validate
 # Manage API keys
 ensemble conductor keys
 ```
+
+### Status Options
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON (for CI/scripting) |
+| `--compact` | Compact single-line format |
+| `--no-health-check` | Skip worker health ping |
 
 ### Init Options
 
@@ -101,6 +114,11 @@ ensemble edgit --help
 # Initialize edgit in current repo
 ensemble edgit init
 
+# Check edgit status
+ensemble edgit status
+ensemble edgit status --compact
+ensemble edgit status --json
+
 # Create version tags
 ensemble edgit tag create prompt v1.0.0
 ensemble edgit tag list
@@ -117,6 +135,13 @@ ensemble edgit deploy list
 ensemble edgit history prompt
 ```
 
+### Status Options
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON (for CI/scripting) |
+| `--compact` | Compact single-line format |
+
 ## Cloud Commands
 
 Cloud connects your project to the Ensemble managed platform.
@@ -131,6 +156,8 @@ ensemble cloud init --env staging
 
 # Check connection status
 ensemble cloud status
+ensemble cloud status --compact
+ensemble cloud status --json
 
 # Rotate cloud key
 ensemble cloud rotate
@@ -138,6 +165,14 @@ ensemble cloud rotate
 # Disable cloud connection
 ensemble cloud disable
 ```
+
+### Status Options
+
+| Flag | Description |
+|------|-------------|
+| `--env <env>` | Target environment (default: production) |
+| `--json` | Output as JSON (for CI/scripting) |
+| `--compact` | Compact single-line format |
 
 ## Chamber Commands
 
