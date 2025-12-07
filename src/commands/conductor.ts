@@ -821,14 +821,25 @@ export function showConductorHelp(): void {
   banners.conductor();
   console.log(`${colors.bold("Commands:")}
   init [name]     Create a new Conductor project
+  start           Start development server (smart defaults)
+  stop            Stop development server
+  restart         Restart development server
   info            Show project info and component counts
   status          Alias for info
-  dev             Start development server
   deploy          Deploy to production
   validate        Validate configuration
   exec            Execute agents
   docs            Generate API documentation
   test            Run tests
+
+${colors.bold("Start Options:")}
+  --port, -p <n>  Server port (default: 8787, auto-finds if busy)
+  --foreground    Run in foreground (don't detach)
+  --no-auto-host  Disable auto --host in containers
+  --persist-to    Persist D1/KV data to directory
+
+${colors.bold("Stop Options:")}
+  --force, -f     Force stop with SIGKILL
 
 ${colors.bold("Info Options:")}
   --json          Output as JSON
@@ -846,10 +857,11 @@ ${colors.bold("Init Options:")}
 
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
+  ${colors.accent("ensemble conductor start")}
+  ${colors.accent("ensemble conductor start --port 3000")}
+  ${colors.accent("ensemble conductor stop")}
   ${colors.accent("ensemble conductor info")}
   ${colors.accent("ensemble conductor info --compact")}
-  ${colors.accent("ensemble conductor info --json")}
-  ${colors.accent("ensemble conductor status")}  ${colors.dim("# alias for info")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/conductor")}
 `);
@@ -868,6 +880,25 @@ export async function routeConductorCommand(args: string[]): Promise<void> {
   }
 
   switch (subCmd) {
+    case "start":
+    case "dev": {
+      // Start development server with smart defaults
+      const { conductorStart } = await import("./start.js");
+      await conductorStart(subArgs);
+      break;
+    }
+    case "stop": {
+      // Stop development server
+      const { conductorStop } = await import("./stop.js");
+      await conductorStop(subArgs);
+      break;
+    }
+    case "restart": {
+      // Restart development server
+      const { conductorRestart } = await import("./stop.js");
+      await conductorRestart(subArgs);
+      break;
+    }
     case "info":
     case "status":
       // Both 'info' and 'status' call the same function

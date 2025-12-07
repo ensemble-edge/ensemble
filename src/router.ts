@@ -238,11 +238,13 @@ async function routeProduct(
 
 /**
  * Run conductor commands (non-init)
- * Handles info/status internally, delegates others to local conductor CLI or npx
+ * Handles info/status/start/stop/restart internally, delegates others to local conductor CLI or npx
  *
  * Command Naming:
  * - `info` is the official command (matches Conductor CLI)
  * - `status` is an alias for user convenience
+ * - `start`/`stop`/`restart` for dev server management
+ * - `dev` is an alias for `start`
  */
 async function runConductor(args: string[]): Promise<void> {
   const [subCmd, ...subArgs] = args;
@@ -257,6 +259,27 @@ async function runConductor(args: string[]): Promise<void> {
   // Both 'info' and 'status' call the same function
   if (subCmd === "info" || subCmd === "status") {
     await conductorStatus(subArgs);
+    return;
+  }
+
+  // Handle start/dev command internally (smart dev server start)
+  if (subCmd === "start" || subCmd === "dev") {
+    const { conductorStart } = await import("./commands/start.js");
+    await conductorStart(subArgs);
+    return;
+  }
+
+  // Handle stop command internally
+  if (subCmd === "stop") {
+    const { conductorStop } = await import("./commands/stop.js");
+    await conductorStop(subArgs);
+    return;
+  }
+
+  // Handle restart command internally
+  if (subCmd === "restart") {
+    const { conductorRestart } = await import("./commands/stop.js");
+    await conductorRestart(subArgs);
     return;
   }
 

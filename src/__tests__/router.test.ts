@@ -209,14 +209,8 @@ describe("router", () => {
       expect(spawn).not.toHaveBeenCalled();
     });
 
-    it("should delegate conductor dev to npx", async () => {
-      await route(["conductor", "dev"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["@ensemble-edge/conductor", "dev"],
-        expect.any(Object),
-      );
-    });
+    // Note: conductor dev/start/stop/restart are handled internally by start.ts/stop.ts
+    // They check for conductor.config.ts and don't delegate to npx
 
     it("should delegate conductor deploy to npx", async () => {
       await route(["conductor", "deploy"]);
