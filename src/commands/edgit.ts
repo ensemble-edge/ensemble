@@ -1,8 +1,18 @@
 /**
  * Ensemble Edgit Commands
  *
- * Commands for Edgit product (status, etc.)
+ * Commands for Edgit product (info, etc.)
  * Init is handled separately in ./init.ts
+ *
+ * Architecture:
+ * - Info DATA comes from Edgit's registry and git tags
+ * - Info DISPLAY is handled here with visual styling (banners, colors, boxes)
+ *
+ * Command Naming:
+ * - Official command: `info` (matches Edgit CLI: `npx edgit info`)
+ * - `status` passes through to git (since edgit is git-native)
+ * - Both `ensemble edgit info` shows project info
+ * - Both `ensemble edgit status` shows git status
  */
 
 import { existsSync } from "node:fs";
@@ -724,21 +734,23 @@ export function showEdgitHelp(): void {
   banners.edgit();
   console.log(`${colors.bold("Commands:")}
   init              Initialize Edgit in repository
-  status            Show Edgit status
+  info              Show Edgit project info
+  status            Git status passthrough
   components        Manage registered components
   tag               Manage component versions
   deploy            Manage deployments
   discover          Discover untracked components
   history           View deployment history
 
-${colors.bold("Status Options:")}
+${colors.bold("Info Options:")}
   --json            Output as JSON
   --compact         Compact single-line format
 
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble edgit init")}
-  ${colors.accent("ensemble edgit status")}
-  ${colors.accent("ensemble edgit status --compact")}
+  ${colors.accent("ensemble edgit info")}
+  ${colors.accent("ensemble edgit info --compact")}
+  ${colors.accent("ensemble edgit status")}  ${colors.dim("# shows git status")}
   ${colors.accent("ensemble edgit components list")}
   ${colors.accent("ensemble edgit tag create my-prompt v1.0.0")}
   ${colors.accent("ensemble edgit deploy set my-prompt v1.0.0 --to prod")}

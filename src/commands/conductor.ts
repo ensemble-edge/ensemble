@@ -1,13 +1,24 @@
 /**
  * Ensemble Conductor Commands
  *
- * Commands for Conductor product (status, etc.)
+ * Commands for Conductor product (info, etc.)
  * Init is handled separately in ./init.ts
+ *
+ * Architecture:
+ * - Info DATA comes from `npx @ensemble-edge/conductor info --json`
+ *   This is the single source of truth, maintained in Conductor
+ * - Info DISPLAY is handled here with visual styling (banners, colors, boxes)
+ *   This provides a nice human experience via ensemble CLI
+ * - Automation users can call Conductor directly for JSON output
+ *
+ * Command Naming:
+ * - Official command: `info` (matches Conductor CLI: `npx @ensemble-edge/conductor info`)
+ * - Alias: `status` (convenience alias for users expecting git-like status command)
+ * - Both `ensemble conductor info` and `ensemble conductor status` work identically
  */
 
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { execSync } from "node:child_process";
 import {
   colors,
   log,
@@ -19,13 +30,14 @@ import {
 } from "../ui/index.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Types (mirrors Conductor's ConductorStatusOutput)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ProjectInfo {
   name: string;
   version: string;
   conductorVersion?: string;
+  projectId?: string;
 }
 
 interface ConfigStatus {
@@ -58,9 +70,12 @@ interface TriggerCounts {
 }
 
 interface SecuritySettings {
-  requireAuth?: boolean;
-  stealthMode?: boolean;
-  allowDirectAgentExecution?: boolean;
+  requireAuth: boolean;
+  requireAuthExplicit: boolean;
+  stealthMode: boolean;
+  stealthModeExplicit: boolean;
+  allowDirectAgentExecution: boolean;
+  allowDirectAgentExecutionExplicit: boolean;
 }
 
 interface CloudflareService {
@@ -91,6 +106,8 @@ interface DeploymentStatus {
 }
 
 interface ConductorStatus {
+  initialized?: boolean;
+  error?: string;
   project: ProjectInfo;
   config: ConfigStatus;
   environment: string;
@@ -103,497 +120,50 @@ interface ConductorStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Parsers
+// Data Fetching (calls Conductor CLI as single source of truth)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Read package.json for project info
+ * Get info from Conductor CLI
+ *
+ * This calls `npx @ensemble-edge/conductor info --json` which is the
+ * authoritative source for all project info data. This ensures:
+ * 1. Single source of truth - Conductor owns the data structure
+ * 2. Consistency - same logic whether called via ensemble or directly
+ * 3. Maintainability - changes to info only need to happen in Conductor
+ *
+ * Note: The Conductor CLI command is `info`, not `status`. This avoids
+ * potential conflicts with git-like status semantics in other tools.
  */
-async function readProjectInfo(): Promise<ProjectInfo> {
-  const info: ProjectInfo = {
-    name: basename(process.cwd()),
-    version: "0.0.0",
-  };
-
+async function getConductorInfo(): Promise<ConductorStatus | null> {
   try {
-    if (existsSync("package.json")) {
-      const content = await readFile("package.json", "utf-8");
-      const pkg = JSON.parse(content);
-      info.name = pkg.name || info.name;
-      info.version = pkg.version || info.version;
+    const result = execSync("npx @ensemble-edge/conductor info --json", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 30000,
+    });
 
-      // Find conductor version in dependencies
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      if (deps["@ensemble-edge/conductor"]) {
-        info.conductorVersion = deps["@ensemble-edge/conductor"].replace(
-          /^[\^~]/,
-          "",
-        );
-      }
-    }
+    return JSON.parse(result) as ConductorStatus;
   } catch {
-    // Ignore errors
+    // Conductor CLI not available or failed
+    return null;
   }
-
-  return info;
 }
 
 /**
- * Check config files exist
+ * Check if Conductor CLI is available
  */
-function checkConfigFiles(): ConfigStatus {
-  return {
-    conductorConfig:
-      existsSync("conductor.config.ts") || existsSync("conductor.config.js"),
-    wranglerConfig: existsSync("wrangler.toml") || existsSync("wrangler.json"),
-  };
-}
-
-/**
- * Detect environment from wrangler.toml or env vars
- */
-async function detectEnvironment(): Promise<string> {
-  // Check env var first
-  if (process.env.ENVIRONMENT) {
-    return process.env.ENVIRONMENT;
-  }
-
-  // Check wrangler.toml [vars]
+function isConductorAvailable(): boolean {
   try {
-    if (existsSync("wrangler.toml")) {
-      const content = await readFile("wrangler.toml", "utf-8");
-      const match = content.match(/ENVIRONMENT\s*=\s*["']([^"']+)["']/);
-      if (match) {
-        return match[1];
-      }
-    }
+    execSync("npx @ensemble-edge/conductor --version", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10000,
+    });
+    return true;
   } catch {
-    // Ignore
+    return false;
   }
-
-  return "development";
-}
-
-/**
- * Parse conductor.config.ts for security settings
- */
-async function parseSecuritySettings(): Promise<SecuritySettings> {
-  const settings: SecuritySettings = {};
-  const configFiles = ["conductor.config.ts", "conductor.config.js"];
-
-  for (const configFile of configFiles) {
-    if (!existsSync(configFile)) continue;
-
-    try {
-      const content = await readFile(configFile, "utf-8");
-
-      // Parse requireAuth
-      if (content.match(/requireAuth\s*:\s*true/)) {
-        settings.requireAuth = true;
-      } else if (content.match(/requireAuth\s*:\s*false/)) {
-        settings.requireAuth = false;
-      }
-
-      // Parse stealthMode
-      if (content.match(/stealthMode\s*:\s*true/)) {
-        settings.stealthMode = true;
-      } else if (content.match(/stealthMode\s*:\s*false/)) {
-        settings.stealthMode = false;
-      }
-
-      // Parse allowDirectAgentExecution
-      if (content.match(/allowDirectAgentExecution\s*:\s*true/)) {
-        settings.allowDirectAgentExecution = true;
-      } else if (content.match(/allowDirectAgentExecution\s*:\s*false/)) {
-        settings.allowDirectAgentExecution = false;
-      }
-
-      break;
-    } catch {
-      // Continue to next file
-    }
-  }
-
-  return settings;
-}
-
-/**
- * Parse wrangler.toml for Cloudflare services
- */
-async function parseCloudflareServices(): Promise<CloudflareServices> {
-  const services: CloudflareServices = {
-    workersAI: { configured: false },
-    aiGateway: { configured: false },
-    vectorize: { configured: false },
-    kv: { configured: false },
-    d1: { configured: false },
-    r2: { configured: false },
-    durableObjects: { configured: false },
-    queues: { configured: false },
-    hyperdrive: { configured: false },
-    analyticsEngine: { configured: false },
-  };
-
-  if (!existsSync("wrangler.toml")) {
-    return services;
-  }
-
-  try {
-    const content = await readFile("wrangler.toml", "utf-8");
-
-    // Workers AI - [ai] section (not commented)
-    // Match [ai] that is NOT preceded by # on the same line
-    if (content.match(/^(?!#)\s*\[ai\]/m)) {
-      services.workersAI.configured = true;
-      const bindingMatch = content.match(
-        /\[ai\][\s\S]*?binding\s*=\s*["']([^"']+)["']/,
-      );
-      if (bindingMatch) {
-        services.workersAI.bindings = [bindingMatch[1]];
-      }
-    }
-
-    // KV Namespaces - [[kv_namespaces]]
-    const kvMatches = content.matchAll(
-      /^\[\[kv_namespaces\]\][\s\S]*?binding\s*=\s*["']([^"']+)["']/gm,
-    );
-    const kvBindings: string[] = [];
-    for (const match of kvMatches) {
-      kvBindings.push(match[1]);
-    }
-    if (kvBindings.length > 0) {
-      services.kv.configured = true;
-      services.kv.bindings = kvBindings;
-      services.kv.count = kvBindings.length;
-    }
-
-    // D1 Databases - [[d1_databases]]
-    const d1Matches = content.matchAll(
-      /^\[\[d1_databases\]\][\s\S]*?binding\s*=\s*["']([^"']+)["'][\s\S]*?database_name\s*=\s*["']([^"']+)["']/gm,
-    );
-    const d1Bindings: string[] = [];
-    let d1Name: string | undefined;
-    for (const match of d1Matches) {
-      d1Bindings.push(match[1]);
-      d1Name = d1Name || match[2];
-    }
-    if (d1Bindings.length > 0) {
-      services.d1.configured = true;
-      services.d1.bindings = d1Bindings;
-      services.d1.name = d1Name;
-    }
-
-    // R2 Buckets - [[r2_buckets]]
-    const r2Matches = content.matchAll(
-      /^\[\[r2_buckets\]\][\s\S]*?binding\s*=\s*["']([^"']+)["']/gm,
-    );
-    const r2Bindings: string[] = [];
-    for (const match of r2Matches) {
-      r2Bindings.push(match[1]);
-    }
-    if (r2Bindings.length > 0) {
-      services.r2.configured = true;
-      services.r2.bindings = r2Bindings;
-      services.r2.count = r2Bindings.length;
-    }
-
-    // Vectorize - [[vectorize]]
-    const vectorizeMatch = content.match(
-      /^\[\[vectorize\]\][\s\S]*?binding\s*=\s*["']([^"']+)["'][\s\S]*?index_name\s*=\s*["']([^"']+)["']/m,
-    );
-    if (vectorizeMatch) {
-      services.vectorize.configured = true;
-      services.vectorize.bindings = [vectorizeMatch[1]];
-      services.vectorize.name = vectorizeMatch[2];
-    }
-
-    // Durable Objects - [[durable_objects.bindings]]
-    const doMatches = content.matchAll(
-      /^\[\[durable_objects\.bindings\]\][\s\S]*?name\s*=\s*["']([^"']+)["']/gm,
-    );
-    const doBindings: string[] = [];
-    for (const match of doMatches) {
-      doBindings.push(match[1]);
-    }
-    if (doBindings.length > 0) {
-      services.durableObjects.configured = true;
-      services.durableObjects.bindings = doBindings;
-      services.durableObjects.count = doBindings.length;
-    }
-
-    // Queues - [[queues.producers]] or [[queues.consumers]]
-    const queueMatches = content.matchAll(
-      /^\[\[queues\.(producers|consumers)\]\][\s\S]*?binding\s*=\s*["']([^"']+)["']/gm,
-    );
-    const queueBindings: string[] = [];
-    for (const match of queueMatches) {
-      if (!queueBindings.includes(match[2])) {
-        queueBindings.push(match[2]);
-      }
-    }
-    if (queueBindings.length > 0) {
-      services.queues.configured = true;
-      services.queues.bindings = queueBindings;
-      services.queues.count = queueBindings.length;
-    }
-
-    // Hyperdrive - [[hyperdrive]]
-    const hyperdriveMatches = content.matchAll(
-      /^\[\[hyperdrive\]\][\s\S]*?binding\s*=\s*["']([^"']+)["']/gm,
-    );
-    const hyperdriveBindings: string[] = [];
-    for (const match of hyperdriveMatches) {
-      hyperdriveBindings.push(match[1]);
-    }
-    if (hyperdriveBindings.length > 0) {
-      services.hyperdrive.configured = true;
-      services.hyperdrive.bindings = hyperdriveBindings;
-      services.hyperdrive.count = hyperdriveBindings.length;
-    }
-
-    // Analytics Engine - [[analytics_engine_datasets]]
-    const analyticsMatch = content.match(
-      /^\[\[analytics_engine_datasets\]\][\s\S]*?binding\s*=\s*["']([^"']+)["'][\s\S]*?dataset\s*=\s*["']([^"']+)["']/m,
-    );
-    if (analyticsMatch) {
-      services.analyticsEngine.configured = true;
-      services.analyticsEngine.bindings = [analyticsMatch[1]];
-      services.analyticsEngine.name = analyticsMatch[2];
-    }
-  } catch {
-    // Ignore parsing errors
-  }
-
-  return services;
-}
-
-/**
- * Count components by scanning directories
- */
-async function countComponents(): Promise<ComponentCounts> {
-  const counts: ComponentCounts = {
-    agents: { total: 0, custom: 0, builtIn: 0 },
-    ensembles: 0,
-    prompts: 0,
-    schemas: 0,
-    configs: 0,
-    queries: 0,
-    scripts: 0,
-    templates: 0,
-    docs: 0,
-  };
-
-  // Count agents
-  const agentDirs = ["agents", "src/agents"];
-  for (const dir of agentDirs) {
-    if (existsSync(dir)) {
-      counts.agents.total += await countYamlFilesRecursive(dir, "agent.yaml");
-    }
-  }
-  counts.agents.custom = counts.agents.total;
-
-  // Count ensembles
-  const ensembleDirs = ["ensembles", "src/ensembles"];
-  for (const dir of ensembleDirs) {
-    if (existsSync(dir)) {
-      counts.ensembles += await countYamlFiles(dir);
-    }
-  }
-
-  // Count other components
-  const componentDirs: [keyof ComponentCounts, string[]][] = [
-    ["prompts", ["prompts", "src/prompts"]],
-    ["schemas", ["schemas", "src/schemas"]],
-    ["configs", ["configs", "src/configs"]],
-    ["queries", ["queries", "src/queries"]],
-    ["scripts", ["scripts", "src/scripts"]],
-    ["templates", ["templates", "src/templates"]],
-    ["docs", ["docs", "src/docs"]],
-  ];
-
-  for (const [key, dirs] of componentDirs) {
-    if (key === "agents" || key === "ensembles") continue;
-    for (const dir of dirs) {
-      if (existsSync(dir)) {
-        (counts[key] as number) += await countFiles(dir);
-      }
-    }
-  }
-
-  return counts;
-}
-
-/**
- * Count YAML files in directory (non-recursive)
- */
-async function countYamlFiles(dir: string): Promise<number> {
-  try {
-    const { readdir } = await import("node:fs/promises");
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter(
-      (e) =>
-        e.isFile() && (e.name.endsWith(".yaml") || e.name.endsWith(".yml")),
-    ).length;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Count specific YAML files recursively (e.g., agent.yaml)
- */
-async function countYamlFilesRecursive(
-  dir: string,
-  filename: string,
-): Promise<number> {
-  try {
-    const { readdir } = await import("node:fs/promises");
-    let count = 0;
-    const entries = await readdir(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        // Check for the specific file in this directory
-        if (existsSync(join(fullPath, filename))) {
-          count++;
-        }
-        // Recursively check subdirectories
-        count += await countYamlFilesRecursive(fullPath, filename);
-      }
-    }
-
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Count files in directory
- */
-async function countFiles(dir: string): Promise<number> {
-  try {
-    const { readdir } = await import("node:fs/promises");
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile()).length;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Count triggers by parsing ensemble YAML files
- */
-async function countTriggers(): Promise<TriggerCounts> {
-  const counts: TriggerCounts = {
-    http: 0,
-    webhook: 0,
-    mcp: 0,
-    cron: 0,
-    email: 0,
-    queue: 0,
-    startup: 0,
-    cli: 0,
-    build: 0,
-  };
-
-  const ensembleDirs = ["ensembles", "src/ensembles"];
-
-  for (const dir of ensembleDirs) {
-    if (!existsSync(dir)) continue;
-
-    try {
-      const { readdir } = await import("node:fs/promises");
-      const entries = await readdir(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        if (!entry.name.endsWith(".yaml") && !entry.name.endsWith(".yml"))
-          continue;
-
-        try {
-          const content = await readFile(join(dir, entry.name), "utf-8");
-
-          // Count trigger types
-          const triggerTypes = [
-            "http",
-            "webhook",
-            "mcp",
-            "cron",
-            "email",
-            "queue",
-            "startup",
-            "cli",
-            "build",
-          ] as const;
-          for (const type of triggerTypes) {
-            // Match type: <triggerType> in trigger array
-            const regex = new RegExp(`type:\\s*${type}`, "gi");
-            const matches = content.match(regex);
-            if (matches) {
-              counts[type] += matches.length;
-            }
-          }
-        } catch {
-          // Skip files that can't be read
-        }
-      }
-    } catch {
-      // Skip directories that can't be read
-    }
-  }
-
-  return counts;
-}
-
-/**
- * Parse conductor.config.ts for cloud settings
- */
-async function parseDeploymentSettings(): Promise<DeploymentStatus> {
-  const deployment: DeploymentStatus = {
-    cloudEnabled: false,
-    pulse: true, // Default to true
-  };
-
-  // Check wrangler.toml for [ensemble.cloud]
-  if (existsSync("wrangler.toml")) {
-    try {
-      const content = await readFile("wrangler.toml", "utf-8");
-      if (content.match(/\[ensemble\.cloud\][\s\S]*?enabled\s*=\s*true/)) {
-        deployment.cloudEnabled = true;
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  // Check conductor.config.ts for cloud settings
-  const configFiles = ["conductor.config.ts", "conductor.config.js"];
-  for (const configFile of configFiles) {
-    if (!existsSync(configFile)) continue;
-
-    try {
-      const content = await readFile(configFile, "utf-8");
-
-      // Extract workerUrl
-      const workerUrlMatch = content.match(/workerUrl\s*:\s*['"]([^'"]+)['"]/);
-      if (workerUrlMatch) {
-        deployment.workerUrl = workerUrlMatch[1];
-      }
-
-      // Check pulse setting
-      if (content.match(/pulse\s*:\s*false/)) {
-        deployment.pulse = false;
-      }
-
-      break;
-    } catch {
-      // Continue
-    }
-  }
-
-  return deployment;
 }
 
 /**
@@ -622,52 +192,52 @@ async function pingWorkerHealth(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Display Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Parse plugins from conductor.config.ts
+ * Format a security setting value with explicit/default indicator
+ *
+ * Shows the actual value (true/false) with a visual indicator:
+ * - If explicitly set in config: just shows the value
+ * - If using default: shows value with "(default)" suffix
+ *
+ * This helps users understand what settings are active vs inherited.
+ *
+ * @param value - The actual boolean value of the setting
+ * @param explicit - Whether this was explicitly set in conductor.config.ts
+ * @returns Formatted string with icon and optional "(default)" indicator
+ *
+ * @example
+ * formatSecurityValue(true, true)   // "✓ true"
+ * formatSecurityValue(true, false)  // "✓ true (default)"
+ * formatSecurityValue(false, true)  // "○ false"
+ * formatSecurityValue(false, false) // "○ false (default)"
  */
-async function parsePlugins(): Promise<string[]> {
-  const plugins: string[] = [];
-  const configFiles = ["conductor.config.ts", "conductor.config.js"];
+function formatSecurityValue(value: boolean, explicit: boolean): string {
+  const icon = value ? colors.success("✓") : colors.dim("○");
+  const valueStr = value ? "true" : "false";
 
-  for (const configFile of configFiles) {
-    if (!existsSync(configFile)) continue;
-
-    try {
-      const content = await readFile(configFile, "utf-8");
-
-      // Look for common plugin patterns
-      const pluginPatterns = [
-        /cloudflarePlugin/,
-        /unkeyPlugin/,
-        /payloadPlugin/,
-        /plasmicPlugin/,
-        /resendPlugin/,
-        /twilioPlugin/,
-        /stripePlugin/,
-      ];
-
-      for (const pattern of pluginPatterns) {
-        if (pattern.test(content)) {
-          const name = pattern.source.replace("Plugin", "");
-          plugins.push(name);
-        }
-      }
-
-      break;
-    } catch {
-      // Continue
-    }
+  if (explicit) {
+    return `${icon} ${valueStr}`;
   }
-
-  return plugins;
+  return `${icon} ${valueStr} ${colors.dim("(default)")}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Display Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Format service status line
+ * Format service status line for Cloudflare services display
+ *
+ * Creates a consistently formatted line showing:
+ * - Status icon (✓ configured, ○ not configured)
+ * - Service name (padded for alignment)
+ * - Detail (name, count, or "Configured"/"Not configured")
+ * - Bindings list (if any)
+ *
+ * @param name - Service display name (e.g., "Workers AI:")
+ * @param service - CloudflareService object with configuration status
+ * @param nameWidth - Padding width for name column (default: 18)
+ * @returns Formatted string for console output
  */
 function formatServiceLine(
   name: string,
@@ -716,6 +286,9 @@ async function displayFullStatus(status: ConductorStatus): Promise<void> {
     console.log(
       `  Conductor:        @ensemble-edge/conductor@${status.project.conductorVersion}`,
     );
+  }
+  if (status.project.projectId) {
+    console.log(`  Project ID:       ${colors.dim(status.project.projectId)}`);
   }
   console.log(
     `  Environment:      ${colors.accent(status.environment)}${status.environment === "development" ? colors.dim(" (local)") : ""}`,
@@ -800,13 +373,13 @@ async function displayFullStatus(status: ConductorStatus): Promise<void> {
   // Security section
   console.log(colors.bold("Security"));
   console.log(
-    `  requireAuth:      ${status.security.requireAuth === true ? colors.success("✓ true") : status.security.requireAuth === false ? colors.dim("○ false") : colors.dim("○ default")}`,
+    `  requireAuth:      ${formatSecurityValue(status.security.requireAuth, status.security.requireAuthExplicit)}`,
   );
   console.log(
-    `  stealthMode:      ${status.security.stealthMode === true ? colors.success("✓ true") : colors.dim("○ false")}`,
+    `  stealthMode:      ${formatSecurityValue(status.security.stealthMode, status.security.stealthModeExplicit)}`,
   );
   console.log(
-    `  allowDirectAgentExecution: ${status.security.allowDirectAgentExecution === true || status.security.allowDirectAgentExecution === undefined ? colors.success("✓ true") : colors.dim("○ false")}`,
+    `  allowDirectAgentExecution: ${formatSecurityValue(status.security.allowDirectAgentExecution, status.security.allowDirectAgentExecutionExplicit)}`,
   );
   console.log("");
 
@@ -912,6 +485,9 @@ function displayCompactStatus(status: ConductorStatus): void {
   console.log(
     `Project:     ${colors.accent(status.project.name)} v${status.project.version} ${colors.dim(conductorVer)}`,
   );
+  if (status.project.projectId) {
+    console.log(`Project ID:  ${colors.dim(status.project.projectId)}`);
+  }
   console.log(`Environment: ${status.environment}`);
   console.log("");
 
@@ -1123,13 +699,35 @@ async function displayUninitializedStatus(
 
 /**
  * Show conductor status
+ *
+ * Architecture:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * This function delegates to Conductor CLI for data, then displays it prettily.
+ *
+ * Data Flow:
+ *   1. Call `npx @ensemble-edge/conductor status --json`
+ *   2. Parse the JSON response (ConductorStatus type)
+ *   3. Display using our pretty UI (banners, colors, boxes)
+ *
+ * Why this approach?
+ *   - Single Source of Truth: Conductor CLI owns the status data structure
+ *   - Maintainability: Changes to status fields only need to happen in Conductor
+ *   - Consistency: Same data whether called via ensemble CLI or directly
+ *   - Automation: Users can call Conductor directly for CI/CD pipelines
+ *
+ * The ensemble CLI adds value through:
+ *   - Beautiful visual presentation (banners, colors, boxes)
+ *   - Interactive prompts (e.g., "Would you like to initialize?")
+ *   - Health check integration with spinners
+ *   - Unified CLI experience across all Ensemble products
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export async function conductorStatus(args: string[]): Promise<void> {
   const isJson = args.includes("--json");
   const isCompact = args.includes("--compact");
   const skipHealth = args.includes("--no-health-check");
 
-  // Check if conductor is initialized
+  // Check if conductor is initialized (quick file check before calling CLI)
   if (!isConductorInitialized()) {
     const initialized = await displayUninitializedStatus(isJson, isCompact);
     if (initialized) {
@@ -1139,49 +737,47 @@ export async function conductorStatus(args: string[]): Promise<void> {
     return;
   }
 
-  // Gather all status info in parallel
-  const [
-    project,
-    config,
-    environment,
-    security,
-    cloudflare,
-    components,
-    triggers,
-    deployment,
-    plugins,
-  ] = await Promise.all([
-    readProjectInfo(),
-    Promise.resolve(checkConfigFiles()),
-    detectEnvironment(),
-    parseSecuritySettings(),
-    parseCloudflareServices(),
-    countComponents(),
-    countTriggers(),
-    parseDeploymentSettings(),
-    parsePlugins(),
-  ]);
+  // Get status data from Conductor CLI (single source of truth)
+  const spinner =
+    !isJson && !isCompact ? createSpinner("Loading status...").start() : null;
 
-  const status: ConductorStatus = {
-    project,
-    config,
-    environment,
-    components,
-    triggers,
-    security,
-    plugins,
-    cloudflare,
-    deployment,
-  };
+  const status = await getConductorInfo();
+
+  if (!status) {
+    spinner?.stop();
+    // Conductor CLI not available - show helpful error
+    log.error("Could not get info from Conductor CLI");
+    log.dim("Make sure @ensemble-edge/conductor is installed:");
+    log.dim("  npm install @ensemble-edge/conductor");
+    log.dim("");
+    log.dim("Or run directly:");
+    log.dim("  npx @ensemble-edge/conductor info");
+    return;
+  }
+
+  // Handle error responses from Conductor
+  if (status.initialized === false || status.error) {
+    spinner?.stop();
+    if (isJson) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      log.error(status.error || "Conductor project not initialized");
+      log.dim("Run `ensemble conductor init` to create a new project.");
+    }
+    return;
+  }
+
+  spinner?.stop();
 
   // Health check (unless skipped or JSON mode)
+  // Note: We do health check here in ensemble CLI for the nice spinner UX
   if (status.deployment.workerUrl && !skipHealth) {
     if (!isJson && !isCompact) {
-      const spinner = createSpinner("Checking worker health...").start();
+      const healthSpinner = createSpinner("Checking worker health...").start();
       status.deployment.health = await pingWorkerHealth(
         status.deployment.workerUrl,
       );
-      spinner.stop();
+      healthSpinner.stop();
     } else {
       status.deployment.health = await pingWorkerHealth(
         status.deployment.workerUrl,
@@ -1189,7 +785,8 @@ export async function conductorStatus(args: string[]): Promise<void> {
     }
   }
 
-  // Display
+  // Display with pretty formatting
+  // This is where ensemble CLI adds value - beautiful visual presentation
   if (isJson) {
     displayJsonStatus(status);
   } else if (isCompact) {
@@ -1206,7 +803,8 @@ export function showConductorHelp(): void {
   banners.conductor();
   console.log(`${colors.bold("Commands:")}
   init [name]     Create a new Conductor project
-  status          Show project status
+  info            Show project info and component counts
+  status          Alias for info
   dev             Start development server
   deploy          Deploy to production
   validate        Validate configuration
@@ -1214,7 +812,7 @@ export function showConductorHelp(): void {
   docs            Generate API documentation
   test            Run tests
 
-${colors.bold("Status Options:")}
+${colors.bold("Info Options:")}
   --json          Output as JSON
   --compact       Compact single-line format
   --no-health-check  Skip worker health ping
@@ -1230,9 +828,10 @@ ${colors.bold("Init Options:")}
 
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
-  ${colors.accent("ensemble conductor status")}
-  ${colors.accent("ensemble conductor status --compact")}
-  ${colors.accent("ensemble conductor status --json")}
+  ${colors.accent("ensemble conductor info")}
+  ${colors.accent("ensemble conductor info --compact")}
+  ${colors.accent("ensemble conductor info --json")}
+  ${colors.accent("ensemble conductor status")}  ${colors.dim("# alias for info")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/conductor")}
 `);
@@ -1251,7 +850,10 @@ export async function routeConductorCommand(args: string[]): Promise<void> {
   }
 
   switch (subCmd) {
+    case "info":
     case "status":
+      // Both 'info' and 'status' call the same function
+      // 'info' is the official command, 'status' is an alias for user convenience
       await conductorStatus(subArgs);
       break;
     default:

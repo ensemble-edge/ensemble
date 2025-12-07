@@ -8,7 +8,13 @@
  */
 
 import { spawn } from "node:child_process";
-import { colors, log, banners } from "./ui/index.js";
+import {
+  colors,
+  log,
+  banners,
+  promptSelect,
+  isInteractive,
+} from "./ui/index.js";
 import { routeCloudCommand } from "./commands/cloud.js";
 import {
   initWizard,
@@ -124,6 +130,13 @@ export async function route(argv: string[]): Promise<void> {
     return;
   }
 
+  // Handle info/status commands - show interactive menu to select product
+  // 'info' is the official command, 'status' is an alias
+  if (cmd === "info" || cmd === "status") {
+    await showInfoMenu(args);
+    return;
+  }
+
   // Route to appropriate handler
   if (isEnsembleProduct(cmd)) {
     await routeProduct(cmd, args);
@@ -185,7 +198,11 @@ async function routeProduct(
 
 /**
  * Run conductor commands (non-init)
- * Handles status internally, delegates others to local conductor CLI or npx
+ * Handles info/status internally, delegates others to local conductor CLI or npx
+ *
+ * Command Naming:
+ * - `info` is the official command (matches Conductor CLI)
+ * - `status` is an alias for user convenience
  */
 async function runConductor(args: string[]): Promise<void> {
   const [subCmd, ...subArgs] = args;
@@ -196,8 +213,9 @@ async function runConductor(args: string[]): Promise<void> {
     return;
   }
 
-  // Handle status command internally
-  if (subCmd === "status") {
+  // Handle info/status command internally
+  // Both 'info' and 'status' call the same function
+  if (subCmd === "info" || subCmd === "status") {
     await conductorStatus(subArgs);
     return;
   }
@@ -211,7 +229,11 @@ async function runConductor(args: string[]): Promise<void> {
 
 /**
  * Run edgit commands (non-init)
- * Handles status internally, delegates others to edgit CLI
+ * Handles info internally, passes status through to git, delegates others to edgit CLI
+ *
+ * Command Naming:
+ * - `info` shows Edgit project info (official command, matches Edgit CLI)
+ * - `status` passes through to git (since edgit is git-native, status = git status)
  */
 async function runEdgit(args: string[]): Promise<void> {
   const [subCmd, ...subArgs] = args;
@@ -222,9 +244,18 @@ async function runEdgit(args: string[]): Promise<void> {
     return;
   }
 
-  // Handle status command internally
-  if (subCmd === "status") {
+  // Handle info command internally (shows Edgit project info)
+  if (subCmd === "info") {
     await edgitStatus(subArgs);
+    return;
+  }
+
+  // Handle status command - passthrough to git
+  // Since edgit is git-native, `ensemble edgit status` should show git status
+  if (subCmd === "status") {
+    await spawnCommand("git", ["status", ...subArgs], {
+      notFoundMessage: "Git not found. Make sure Git is installed.",
+    });
     return;
   }
 
@@ -271,6 +302,95 @@ ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/chamber")}
  */
 async function runCloud(args: string[]): Promise<void> {
   await routeCloudCommand(args);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Info/Status Menu
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Show interactive menu for `ensemble info` / `ensemble status`
+ *
+ * Both commands work identically - shows a menu to select which product
+ * to show info for (Conductor, Edgit, or Cloud).
+ *
+ * Command Naming:
+ * - `ensemble info` is the official command
+ * - `ensemble status` is an alias for user convenience
+ */
+async function showInfoMenu(args: string[]): Promise<void> {
+  const isJson = args.includes("--json");
+  const isCompact = args.includes("--compact");
+
+  // Non-interactive mode: show help
+  if (!isInteractive()) {
+    console.log(`
+${colors.bold("Ensemble Info")}
+
+Show project info for an Ensemble product.
+
+${colors.bold("Usage:")}
+  ensemble info                    Interactive product selection
+  ensemble conductor info          Show Conductor project info
+  ensemble edgit info              Show Edgit project info
+  ensemble cloud info              Show Cloud account info
+
+${colors.bold("Options:")}
+  --json            Output as JSON
+  --compact         Compact single-line format
+
+${colors.bold("Aliases:")}
+  ensemble status                  Alias for 'ensemble info'
+  ensemble conductor status        Alias for 'ensemble conductor info'
+`);
+    return;
+  }
+
+  // Show banner
+  banners.ensemble();
+  console.log("");
+
+  // Interactive menu
+  const product = await promptSelect<"conductor" | "edgit" | "cloud">(
+    "Which product would you like to see info for?",
+    [
+      {
+        value: "conductor",
+        title: "Conductor",
+        description: "AI agent orchestration",
+      },
+      {
+        value: "edgit",
+        title: "Edgit",
+        description: "Git-native component versioning",
+      },
+      {
+        value: "cloud",
+        title: "Cloud",
+        description: "Ensemble Cloud account",
+      },
+    ],
+  );
+
+  console.log("");
+
+  // Build args for the info command
+  const infoArgs: string[] = [];
+  if (isJson) infoArgs.push("--json");
+  if (isCompact) infoArgs.push("--compact");
+
+  // Route to the appropriate info command
+  switch (product) {
+    case "conductor":
+      await conductorStatus(infoArgs);
+      break;
+    case "edgit":
+      await edgitStatus(infoArgs);
+      break;
+    case "cloud":
+      await routeCloudCommand(["info", ...infoArgs]);
+      break;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

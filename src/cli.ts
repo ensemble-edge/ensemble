@@ -28,6 +28,8 @@ ${colors.bold("Products:")}
   cloud         Managed platform
 
 ${colors.bold("Commands:")}
+  info          Show project info ${colors.dim("(interactive product selection)")}
+  status        Alias for info
   configure     Configure AI providers, secrets, and more
 
 ${colors.bold("Options:")}
@@ -44,7 +46,9 @@ ${colors.bold("Getting Started:")}
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
   ${colors.accent("ensemble conductor init --setup starter")}
-  ${colors.accent("ensemble edgit tag create prompt v1.0.0")}
+  ${colors.accent("ensemble conductor info")}
+  ${colors.accent("ensemble edgit info")}
+  ${colors.accent("ensemble info")}  ${colors.dim("# interactive product selection")}
   ${colors.accent("pnpm run dev")}
   ${colors.accent("pnpm run deploy")}
 
