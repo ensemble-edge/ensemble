@@ -1,5 +1,15 @@
 # @ensemble-edge/ensemble
 
+## 0.1.12
+
+### Patch Changes
+
+- 0487e7c: Add conductor start/stop/restart commands with smart dev server management
+  - Auto-detects dev containers and binds to 0.0.0.0
+  - Auto-finds available port if default is in use
+  - Tracks PID for clean stop command
+  - Graceful shutdown with SIGTERM, fallback to SIGKILL
+
 ## 0.1.11
 
 ### Patch Changes
