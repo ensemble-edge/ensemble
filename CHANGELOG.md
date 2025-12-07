@@ -1,5 +1,11 @@
 # @ensemble-edge/ensemble
 
+## 0.1.13
+
+### Patch Changes
+
+- 936e051: Make conductor start run in foreground by default (use --background for detached mode) and generate unique projectId during init
+
 ## 0.1.12
 
 ### Patch Changes
