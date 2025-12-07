@@ -1,5 +1,14 @@
 # @ensemble-edge/ensemble
 
+## 0.1.11
+
+### Patch Changes
+
+- 5ef3f5b: Fix version command to show scan location and skip internal monorepo packages
+  - Display "Scanning <path>" to clarify where projects are being discovered
+  - Skip packages using workspace:\* versions (internal monorepo packages)
+  - Improved messaging when no projects are found
+
 ## 0.1.10
 
 ### Patch Changes
