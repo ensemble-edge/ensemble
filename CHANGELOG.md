@@ -1,5 +1,15 @@
 # @ensemble-edge/ensemble
 
+## 0.1.9
+
+### Patch Changes
+
+- 1681fa9: Add `ensemble info` command with interactive product selection
+  - Interactive menu to select Conductor, Edgit, or Cloud
+  - `status` is an alias for `info`
+  - Calls product CLIs for data (single source of truth architecture)
+  - `ensemble edgit status` passes through to git status
+
 ## 0.1.8
 
 ### Patch Changes
