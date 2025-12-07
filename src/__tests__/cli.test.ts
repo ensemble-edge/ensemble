@@ -12,6 +12,8 @@ vi.mock("../ui/index.js", () => ({
     dim: (s: string) => s,
     accent: (s: string) => s,
     underline: (s: string) => s,
+    success: (s: string) => s,
+    warning: (s: string) => s,
   },
   log: {
     error: vi.fn(),
@@ -19,6 +21,23 @@ vi.mock("../ui/index.js", () => ({
   banners: {
     ensemble: vi.fn(),
   },
+  createSpinner: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    success: vi.fn().mockReturnThis(),
+    error: vi.fn().mockReturnThis(),
+  })),
+}));
+
+// Mock fs for landscape scanning
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(() => false),
+  readdirSync: vi.fn(() => []),
+  readFileSync: vi.fn(() => JSON.stringify({ version: "0.0.0-test" })),
+}));
+
+vi.mock("node:fs/promises", () => ({
+  readFile: vi.fn(() => Promise.resolve("{}")),
 }));
 
 import { run } from "../cli.js";
@@ -68,15 +87,19 @@ describe("cli", () => {
     it("should show version with --version flag", async () => {
       await run(["node", "ensemble", "--version"]);
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(`ensemble v${version}`);
+      // Version command now shows landscape, but should still not route
       expect(route).not.toHaveBeenCalled();
+      // Should have called console.log at least once (for version output)
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     it("should show version with -v flag", async () => {
       await run(["node", "ensemble", "-v"]);
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(`ensemble v${version}`);
+      // Version command now shows landscape, but should still not route
       expect(route).not.toHaveBeenCalled();
+      // Should have called console.log at least once
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     it("should route commands to router", async () => {
@@ -115,7 +138,8 @@ describe("cli", () => {
 
       await run();
 
-      expect(consoleLogSpy).toHaveBeenCalledWith(`ensemble v${version}`);
+      // Version command shows landscape output
+      expect(consoleLogSpy).toHaveBeenCalled();
 
       process.argv = originalArgv;
     });

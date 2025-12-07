@@ -16,6 +16,7 @@ vi.mock("node:child_process", () => ({
 // Mock fs modules
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(() => false),
+  readFileSync: vi.fn(() => JSON.stringify({ version: "0.0.0-test" })),
 }));
 
 vi.mock("node:fs/promises", () => ({

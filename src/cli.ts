@@ -30,6 +30,7 @@ ${colors.bold("Products:")}
 ${colors.bold("Commands:")}
   info          Show project info ${colors.dim("(interactive product selection)")}
   status        Alias for info
+  upgrade       Upgrade Ensemble packages ${colors.dim("(project or global CLI)")}
   configure     Configure AI providers, secrets, and more
 
 ${colors.bold("Options:")}

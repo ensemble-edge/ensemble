@@ -30,6 +30,7 @@ import {
   showConductorHelp as conductorHelp,
 } from "./commands/conductor.js";
 import { edgitStatus, showEdgitHelp as edgitHelp } from "./commands/edgit.js";
+import { runUpgrade, showUpgradeHelp } from "./commands/upgrade.js";
 
 /**
  * Ensemble products - handled internally or via subprocess
@@ -160,6 +161,12 @@ export async function route(argv: string[]): Promise<void> {
   // Handle configure command
   if (cmd === "configure") {
     await routeConfigure(args);
+    return;
+  }
+
+  // Handle upgrade command
+  if (cmd === "upgrade") {
+    await routeUpgrade(args);
     return;
   }
 
@@ -426,6 +433,31 @@ ${colors.bold("Aliases:")}
       await routeCloudCommand(["info", ...infoArgs]);
       break;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upgrade Command
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Route upgrade command
+ */
+async function routeUpgrade(args: string[]): Promise<void> {
+  // Show help
+  if (args.includes("--help") || args.includes("-h")) {
+    showUpgradeHelp();
+    return;
+  }
+
+  // Parse options
+  const options = {
+    all: args.includes("--all") || args.includes("-a"),
+    yes: args.includes("--yes") || args.includes("-y"),
+    dryRun: args.includes("--dry-run"),
+    global: args.includes("--global") || args.includes("-g"),
+  };
+
+  await runUpgrade(options);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
