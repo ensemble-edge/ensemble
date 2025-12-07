@@ -2,14 +2,15 @@
  * Conductor Start Command
  *
  * Start the Conductor development server with smart defaults:
+ * - Runs in foreground by default (see logs in real-time)
  * - Auto-detects dev containers and adds --host 0.0.0.0
  * - Auto-finds available port if default is in use
- * - Tracks PID for clean stop command
+ * - Use --background to detach and track PID for stop command
  *
  * Usage:
- *   ensemble conductor start              # Start with smart defaults
+ *   ensemble conductor start              # Start in foreground (default)
  *   ensemble conductor start --port 3000  # Use specific port
- *   ensemble conductor start --foreground # Run in foreground (don't detach)
+ *   ensemble conductor start --background # Run in background (detached)
  */
 
 import {
@@ -45,7 +46,7 @@ const LOG_FILE = `${PID_DIR}/server.log`;
 
 export interface StartOptions {
   port?: number;
-  foreground?: boolean;
+  background?: boolean;
   noAutoHost?: boolean;
   persistTo?: string;
 }
@@ -246,18 +247,7 @@ export async function conductorStart(args: string[]): Promise<void> {
   log.dim(`Running: ${fullCmd}`);
   console.log("");
 
-  if (options.foreground) {
-    // Foreground mode - just exec wrangler
-    try {
-      execSync(fullCmd, {
-        stdio: "inherit",
-        cwd: process.cwd(),
-      });
-    } catch {
-      // User pressed Ctrl+C or process exited
-      process.exit(0);
-    }
-  } else {
+  if (options.background) {
     // Background mode - spawn and detach
     const startSpinner = createSpinner("Starting server...").start();
 
@@ -373,6 +363,17 @@ export async function conductorStart(args: string[]): Promise<void> {
       cleanupPidFile();
       process.exit(1);
     }
+  } else {
+    // Foreground mode (default) - just exec wrangler
+    try {
+      execSync(fullCmd, {
+        stdio: "inherit",
+        cwd: process.cwd(),
+      });
+    } catch {
+      // User pressed Ctrl+C or process exited
+      process.exit(0);
+    }
   }
 }
 
@@ -394,8 +395,8 @@ function parseStartOptions(args: string[]): StartOptions {
           process.exit(1);
         }
       }
-    } else if (arg === "--foreground" || arg === "-f") {
-      options.foreground = true;
+    } else if (arg === "--background" || arg === "-b") {
+      options.background = true;
     } else if (arg === "--no-auto-host") {
       options.noAutoHost = true;
     } else if (arg === "--persist-to") {

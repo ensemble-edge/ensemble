@@ -22,6 +22,7 @@ import {
   readdir,
 } from "node:fs/promises";
 import { resolve, basename, join, relative } from "node:path";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   colors,
@@ -293,6 +294,8 @@ interface CopyTemplateOptions {
   projectName: string;
   /** Dev container mode - adjust dev script */
   inDevContainer: boolean;
+  /** Project ID for conductor.config.ts substitution */
+  projectId: string;
 }
 
 /**
@@ -347,6 +350,13 @@ async function copyTemplateDirectory(
         // Transform package.json
         await copyAndTransformPackageJson(srcPath, destPath, options);
         files.push(relativePath);
+      } else if (
+        entry.name === "conductor.config.ts" ||
+        entry.name === "conductor.config.js"
+      ) {
+        // Transform conductor.config to replace __PROJECT_ID__ placeholder
+        await copyAndTransformConductorConfig(srcPath, destPath, options);
+        files.push(relativePath);
       } else {
         // Regular file copy
         await copyFile(srcPath, destPath);
@@ -393,6 +403,24 @@ async function copyAndTransformPackageJson(
   }
 
   await writeFile(destPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+/**
+ * Copy and transform conductor.config.ts/js
+ *
+ * - Replaces __PROJECT_ID__ placeholder with generated UUID
+ */
+async function copyAndTransformConductorConfig(
+  srcPath: string,
+  destPath: string,
+  options: CopyTemplateOptions,
+): Promise<void> {
+  let content = await readFile(srcPath, "utf-8");
+
+  // Replace __PROJECT_ID__ placeholder with actual project ID
+  content = content.replace(/__PROJECT_ID__/g, options.projectId);
+
+  await writeFile(destPath, content);
 }
 
 /**
@@ -1199,6 +1227,9 @@ export async function initWizard(
           allSucceeded = false;
         } else {
           try {
+            // Generate a unique project ID for Pulse/telemetry
+            const projectId = randomUUID();
+
             const copiedFiles = await copyTemplateDirectory(
               templatePath,
               targetDir,
@@ -1206,6 +1237,7 @@ export async function initWizard(
                 includeExamples: setupType === "full",
                 projectName: packageName,
                 inDevContainer,
+                projectId,
               },
             );
 
