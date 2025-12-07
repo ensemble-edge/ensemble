@@ -41,6 +41,7 @@ export interface ProjectInfo {
 }
 
 export interface LandscapeInfo {
+  scanRoot: string;
   cliVersion: string;
   cliLatest?: string;
   cliHasUpdate: boolean;
@@ -104,6 +105,13 @@ function cleanVersion(version: string): string {
 }
 
 /**
+ * Check if a version is a workspace reference (internal monorepo package)
+ */
+function isWorkspaceVersion(version: string): boolean {
+  return version.startsWith("workspace:");
+}
+
+/**
  * Get short package name
  */
 function shortName(name: string): string {
@@ -153,12 +161,14 @@ function detectProjectType(
 
 /**
  * Detect packages in a directory
+ * Returns empty array if this looks like an internal monorepo package
  */
 async function detectPackagesInDir(dir: string): Promise<PackageInfo[]> {
   const pkg = await readPackageJson(dir);
   if (!pkg) return [];
 
   const packages: PackageInfo[] = [];
+  let hasWorkspaceRef = false;
 
   for (const name of ENSEMBLE_PACKAGES) {
     // Skip the CLI itself in project detection
@@ -169,6 +179,12 @@ async function detectPackagesInDir(dir: string): Promise<PackageInfo[]> {
     const version = depVersion || devDepVersion;
 
     if (version) {
+      // Skip workspace references - these are internal monorepo packages
+      if (isWorkspaceVersion(version)) {
+        hasWorkspaceRef = true;
+        continue;
+      }
+
       packages.push({
         name,
         shortName: shortName(name),
@@ -176,6 +192,12 @@ async function detectPackagesInDir(dir: string): Promise<PackageInfo[]> {
         hasUpdate: false,
       });
     }
+  }
+
+  // If any ensemble package uses workspace:*, this is likely an internal package
+  // Return empty to skip this directory entirely
+  if (hasWorkspaceRef && packages.length === 0) {
+    return [];
   }
 
   return packages;
@@ -306,6 +328,7 @@ export async function getLandscape(
   );
 
   return {
+    scanRoot: rootDir,
     cliVersion,
     cliLatest: cliLatest ?? undefined,
     cliHasUpdate,
@@ -333,12 +356,16 @@ export function displayLandscape(landscape: LandscapeInfo): void {
   }
   console.log("");
 
+  // Show scan location
+  console.log(colors.dim(`Scanning ${landscape.scanRoot}`));
+  console.log("");
+
   if (landscape.projects.length === 0) {
-    console.log(colors.dim("No Ensemble projects found."));
+    console.log(colors.dim("No Ensemble projects found in this directory."));
     console.log("");
     console.log(colors.dim("To create a new project:"));
     console.log(`  ${colors.accent("ensemble conductor init my-project")}`);
-    console.log(`  ${colors.accent("ensemble edgit init my-project")}`);
+    console.log(`  ${colors.accent("ensemble edgit init")}`);
     return;
   }
 
