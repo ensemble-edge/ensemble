@@ -124,10 +124,26 @@ interface ConductorStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Get the conductor command to use
+ *
+ * Priority:
+ * 1. Local binary (node_modules/.bin/conductor) - fastest, uses project's version
+ * 2. npx with package name - fallback if local not available
+ */
+function getConductorCommand(): string {
+  // Check for local binary first (installed in project)
+  if (existsSync("node_modules/.bin/conductor")) {
+    return "node_modules/.bin/conductor";
+  }
+  // Fallback to npx
+  return "npx @ensemble-edge/conductor";
+}
+
+/**
  * Get info from Conductor CLI
  *
- * This calls `npx @ensemble-edge/conductor info --json` which is the
- * authoritative source for all project info data. This ensures:
+ * This calls `conductor info --json` which is the authoritative source for all
+ * project info data. This ensures:
  * 1. Single source of truth - Conductor owns the data structure
  * 2. Consistency - same logic whether called via ensemble or directly
  * 3. Maintainability - changes to info only need to happen in Conductor
@@ -137,7 +153,8 @@ interface ConductorStatus {
  */
 async function getConductorInfo(): Promise<ConductorStatus | null> {
   try {
-    const result = execSync("npx @ensemble-edge/conductor info --json", {
+    const cmd = getConductorCommand();
+    const result = execSync(`${cmd} info --json`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 30000,
@@ -155,7 +172,8 @@ async function getConductorInfo(): Promise<ConductorStatus | null> {
  */
 function isConductorAvailable(): boolean {
   try {
-    execSync("npx @ensemble-edge/conductor --version", {
+    const cmd = getConductorCommand();
+    execSync(`${cmd} --version`, {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 10000,

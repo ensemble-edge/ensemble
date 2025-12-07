@@ -8,6 +8,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   colors,
   log,
@@ -41,6 +42,38 @@ type EnsembleProduct = (typeof ENSEMBLE_PRODUCTS)[number];
  */
 function isEnsembleProduct(cmd: string): cmd is EnsembleProduct {
   return ENSEMBLE_PRODUCTS.includes(cmd as EnsembleProduct);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLI Resolution Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Get the conductor CLI command to use
+ *
+ * Priority:
+ * 1. Local binary (node_modules/.bin/conductor) - fastest, uses project's version
+ * 2. npx with package name - fallback if local not available
+ */
+function getConductorCommand(): { cmd: string; args: string[] } {
+  if (existsSync("node_modules/.bin/conductor")) {
+    return { cmd: "node_modules/.bin/conductor", args: [] };
+  }
+  return { cmd: "npx", args: ["@ensemble-edge/conductor"] };
+}
+
+/**
+ * Get the edgit CLI command to use
+ *
+ * Priority:
+ * 1. Local binary (node_modules/.bin/edgit) - fastest, uses project's version
+ * 2. npx with package name - fallback if local not available
+ */
+function getEdgitCommand(): { cmd: string; args: string[] } {
+  if (existsSync("node_modules/.bin/edgit")) {
+    return { cmd: "node_modules/.bin/edgit", args: [] };
+  }
+  return { cmd: "npx", args: ["edgit"] };
 }
 
 /**
@@ -220,8 +253,9 @@ async function runConductor(args: string[]): Promise<void> {
     return;
   }
 
-  // Delegate other commands to conductor CLI
-  await spawnCommand("npx", ["@ensemble-edge/conductor", ...args], {
+  // Delegate other commands to conductor CLI (use local binary if available)
+  const conductorCmd = getConductorCommand();
+  await spawnCommand(conductorCmd.cmd, [...conductorCmd.args, ...args], {
     notFoundMessage:
       "Conductor not found. Run 'ensemble conductor init' to create a project.",
   });
@@ -259,8 +293,9 @@ async function runEdgit(args: string[]): Promise<void> {
     return;
   }
 
-  // Delegate other commands to edgit CLI
-  await spawnCommand("npx", ["edgit", ...args], {
+  // Delegate other commands to edgit CLI (use local binary if available)
+  const edgitCmd = getEdgitCommand();
+  await spawnCommand(edgitCmd.cmd, [...edgitCmd.args, ...args], {
     notFoundMessage:
       "Edgit not found. Run 'ensemble edgit init' to create a project.",
   });
