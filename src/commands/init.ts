@@ -937,22 +937,26 @@ export async function initWizard(
     // Loop until we get a valid name or user confirms overwrite
     let confirmed = false;
     while (!confirmed) {
-      projectName = await promptText(`Project name:`, defaultName, {
-        validate: (value) => {
-          if (!value.trim()) return "Project name is required";
+      projectName = await promptText(
+        `Project name ${colors.dim('(use "." for current directory)')}:`,
+        defaultName,
+        {
+          validate: (value) => {
+            if (!value.trim()) return "Project name is required";
 
-          // Special case: "." means use current directory (always valid syntactically)
-          if (value === ".") {
+            // Special case: "." means use current directory (always valid syntactically)
+            if (value === ".") {
+              return true;
+            }
+
+            if (!/^[a-z0-9-_]+$/i.test(value)) {
+              return "Use only letters, numbers, dashes, and underscores";
+            }
+            // Allow any valid name - we'll check for existing directory after
             return true;
-          }
-
-          if (!/^[a-z0-9-_]+$/i.test(value)) {
-            return "Use only letters, numbers, dashes, and underscores";
-          }
-          // Allow any valid name - we'll check for existing directory after
-          return true;
+          },
         },
-      });
+      );
 
       // Check if selected directory needs overwrite confirmation
       const selectedTargetDir =
