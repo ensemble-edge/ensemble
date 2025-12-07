@@ -40,7 +40,9 @@ vi.mock("../ui/index.js", () => ({
     accent: (s: string) => s,
     success: (s: string) => s,
     warning: (s: string) => s,
+    error: (s: string) => s,
     underline: (s: string) => s,
+    primaryBold: (s: string) => s,
   },
   log: {
     info: vi.fn(),
@@ -58,6 +60,8 @@ vi.mock("../ui/index.js", () => ({
     error: vi.fn().mockReturnThis(),
   })),
   successBox: vi.fn((title, content) => `${title}\n${content}`),
+  promptConfirm: vi.fn().mockResolvedValue(false),
+  isInteractive: vi.fn().mockReturnValue(false),
 }));
 
 import {
@@ -108,7 +112,8 @@ describe("cloud commands", () => {
 
     it("should route to status command", async () => {
       await routeCloudCommand(["status"]);
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
+      // Status command now shows uninitialized state instead of error
+      expect(banners.cloud).toHaveBeenCalled();
     });
 
     it("should route to rotate command", async () => {
@@ -153,9 +158,10 @@ describe("cloud commands", () => {
   });
 
   describe("cloudStatus", () => {
-    it("should error without wrangler.toml", async () => {
+    it("should show uninitialized status without wrangler.toml", async () => {
       await cloudStatus([]);
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
+      // Status command now shows uninitialized state instead of error
+      expect(banners.cloud).toHaveBeenCalled();
     });
 
     it("should output JSON with --json flag and no config", async () => {
@@ -163,7 +169,11 @@ describe("cloud commands", () => {
 
       await cloudStatus(["--json"]);
       expect(consoleSpy).toHaveBeenCalledWith(
-        JSON.stringify({ enabled: false, error: "No wrangler.toml" }),
+        JSON.stringify({
+          initialized: false,
+          enabled: false,
+          error: "No wrangler.toml - Conductor project required",
+        }),
       );
 
       consoleSpy.mockRestore();

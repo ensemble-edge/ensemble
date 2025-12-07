@@ -37,6 +37,7 @@ vi.mock("../ui/index.js", () => ({
     warning: (s: string) => s,
     success: (s: string) => s,
     error: (s: string) => s,
+    primaryBold: (s: string) => s,
   },
   log: {
     success: vi.fn(),
@@ -262,9 +263,10 @@ describe("router", () => {
       expect(banners.cloud).toHaveBeenCalled();
     });
 
-    it("should handle cloud status (requires wrangler.toml)", async () => {
+    it("should handle cloud status (shows uninitialized without wrangler.toml)", async () => {
       await route(["cloud", "status"]);
-      expect(log.error).toHaveBeenCalledWith("No wrangler.toml found.");
+      // Status command now shows uninitialized state instead of error
+      expect(banners.cloud).toHaveBeenCalled();
     });
 
     it("should handle unknown cloud subcommand", async () => {
