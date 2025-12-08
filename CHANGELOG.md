@@ -1,5 +1,11 @@
 # @ensemble-edge/ensemble
 
+## 0.1.14
+
+### Patch Changes
+
+- b2dfb6b: - Fix dev container networking: use `--ip` instead of `--host` flag for wrangler (--ip sets listen address, --host is for request forwarding)
+
 ## 0.1.13
 
 ### Patch Changes
