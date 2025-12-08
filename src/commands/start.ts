@@ -3,7 +3,7 @@
  *
  * Start the Conductor development server with smart defaults:
  * - Runs in foreground by default (see logs in real-time)
- * - Auto-detects dev containers and adds --host 0.0.0.0
+ * - Auto-detects dev containers and adds --ip 0.0.0.0
  * - Auto-finds available port if default is in use
  * - Use --background to detach and track PID for stop command
  *
@@ -223,7 +223,8 @@ export async function conductorStart(args: string[]): Promise<void> {
   const wranglerArgs = ["dev"];
 
   if (host) {
-    wranglerArgs.push("--host", host);
+    // Note: --ip sets the listen address, --host is for request forwarding
+    wranglerArgs.push("--ip", host);
   }
   wranglerArgs.push("--port", port.toString());
 

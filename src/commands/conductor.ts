@@ -835,7 +835,7 @@ export function showConductorHelp(): void {
 ${colors.bold("Start Options:")}
   --port, -p <n>  Server port (default: 8787, auto-finds if busy)
   --background, -b  Run in background (detached)
-  --no-auto-host  Disable auto --host in containers
+  --no-auto-host  Disable auto --ip 0.0.0.0 in containers
   --persist-to    Persist D1/KV data to directory
 
 ${colors.bold("Stop Options:")}
