@@ -105,6 +105,35 @@ function cleanVersion(version: string): string {
 }
 
 /**
+ * Resolve actual installed version from node_modules
+ * Handles cases where package.json specifies "latest" or other tags
+ */
+async function resolveInstalledVersion(
+  dir: string,
+  packageName: string,
+  declaredVersion: string,
+): Promise<string> {
+  // If it's a proper semver, just clean and return it
+  if (/^\d+\.\d+\.\d+/.test(cleanVersion(declaredVersion))) {
+    return cleanVersion(declaredVersion);
+  }
+
+  // For "latest", "*", or other tags, check node_modules for actual version
+  try {
+    const pkgPath = resolve(dir, "node_modules", packageName, "package.json");
+    const content = await readFile(pkgPath, "utf-8");
+    const pkg = JSON.parse(content) as { version?: string };
+    if (pkg.version) {
+      return pkg.version;
+    }
+  } catch {
+    // Fall back to declared version if we can't read node_modules
+  }
+
+  return cleanVersion(declaredVersion);
+}
+
+/**
  * Check if a version is a workspace reference (internal monorepo package)
  */
 function isWorkspaceVersion(version: string): boolean {
@@ -185,10 +214,13 @@ async function detectPackagesInDir(dir: string): Promise<PackageInfo[]> {
         continue;
       }
 
+      // Resolve actual installed version (handles "latest", "*", etc.)
+      const installedVersion = await resolveInstalledVersion(dir, name, version);
+
       packages.push({
         name,
         shortName: shortName(name),
-        installed: cleanVersion(version),
+        installed: installedVersion,
         hasUpdate: false,
       });
     }
