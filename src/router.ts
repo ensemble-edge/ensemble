@@ -4,7 +4,9 @@
  * Routes commands to:
  * 1. Unified init wizard (no args)
  * 2. Ensemble products (conductor, edgit, chamber, cloud)
- * 3. Wrangler passthrough (everything else)
+ * 3. Explicit wrangler command (ensemble wrangler <cmd>)
+ * 4. Shortcuts (tail)
+ * 5. Unknown commands show helpful error
  */
 
 import { spawn } from "node:child_process";
@@ -180,10 +182,42 @@ export async function route(argv: string[]): Promise<void> {
   // Route to appropriate handler
   if (isEnsembleProduct(cmd)) {
     await routeProduct(cmd, args);
-  } else {
-    // Wrangler passthrough
-    await runWrangler(cmd, args);
+    return;
   }
+
+  // Explicit wrangler passthrough: ensemble wrangler <cmd>
+  if (cmd === "wrangler") {
+    if (args.length === 0) {
+      console.log(`
+${colors.bold("Wrangler Passthrough")}
+
+Run any Wrangler command through Ensemble CLI.
+
+${colors.bold("Usage:")}
+  ensemble wrangler <command> [options]
+
+${colors.bold("Examples:")}
+  ensemble wrangler deploy          Deploy your Worker
+  ensemble wrangler secret put KEY  Set a secret
+  ensemble wrangler tail            Stream live logs
+  ensemble wrangler whoami          Show logged-in user
+
+${colors.dim("For all Wrangler commands, see: https://developers.cloudflare.com/workers/wrangler/commands/")}
+`);
+      return;
+    }
+    await runWrangler(args[0], args.slice(1));
+    return;
+  }
+
+  // Shortcut: ensemble tail → wrangler tail (commonly used for debugging)
+  if (cmd === "tail") {
+    await runWrangler("tail", args);
+    return;
+  }
+
+  // Unknown command - show helpful error
+  await showUnknownCommandError(cmd);
 }
 
 /**
@@ -530,11 +564,64 @@ function parseProvider(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Passthrough Handlers
+// Unknown Command Handler
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Run wrangler command (passthrough)
+ * Show helpful error for unknown commands
+ */
+async function showUnknownCommandError(cmd: string): Promise<void> {
+  // Check for common typos/mistakes
+  const suggestions: string[] = [];
+
+  if (cmd === "start" || cmd === "dev") {
+    suggestions.push(`ensemble conductor start`);
+  } else if (cmd === "init") {
+    suggestions.push(`ensemble conductor init`);
+    suggestions.push(`ensemble edgit init`);
+  } else if (cmd === "deploy") {
+    suggestions.push(`ensemble wrangler deploy`);
+  } else if (cmd === "secret" || cmd === "secrets") {
+    suggestions.push(`ensemble wrangler secret`);
+  } else if (cmd === "login") {
+    suggestions.push(`ensemble wrangler login`);
+  } else if (cmd === "whoami") {
+    suggestions.push(`ensemble wrangler whoami`);
+  }
+
+  console.log("");
+  log.error(`Unknown command: ${cmd}`);
+  console.log("");
+
+  if (suggestions.length > 0) {
+    console.log(`${colors.bold("Did you mean?")}`);
+    for (const suggestion of suggestions) {
+      console.log(`  ${colors.accent(suggestion)}`);
+    }
+    console.log("");
+  }
+
+  console.log(`${colors.bold("Available commands:")}
+  ${colors.accent("conductor")}    AI agent orchestration
+  ${colors.accent("edgit")}        Git-native component versioning
+  ${colors.accent("chamber")}      Edge data layer (coming soon)
+  ${colors.accent("cloud")}        Ensemble Cloud connection
+  ${colors.accent("configure")}    Configure AI providers
+  ${colors.accent("upgrade")}      Upgrade Ensemble packages
+  ${colors.accent("info")}         Show project info
+  ${colors.accent("tail")}         Stream live logs (shortcut for wrangler tail)
+  ${colors.accent("wrangler")}     Run any Wrangler command
+
+${colors.dim("Run 'ensemble --help' for more information.")}
+`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wrangler Passthrough
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run wrangler command (explicit passthrough)
  */
 async function runWrangler(cmd: string, args: string[]): Promise<void> {
   await spawnCommand("wrangler", [cmd, ...args], {

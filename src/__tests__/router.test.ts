@@ -126,20 +126,36 @@ describe("router", () => {
       expect(banners.cloud).toHaveBeenCalled();
     });
 
-    it("should passthrough unknown commands to wrangler", async () => {
+    it("should show error for unknown commands (no auto-passthrough)", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       await route(["dev"]);
+      // Should show helpful error, not passthrough to wrangler
+      expect(spawn).not.toHaveBeenCalledWith(
+        "wrangler",
+        expect.any(Array),
+        expect.any(Object),
+      );
+      // Should show "Did you mean?" suggestion for 'dev' command
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Did you mean?"),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("should passthrough explicit wrangler commands", async () => {
+      await route(["wrangler", "deploy", "--dry-run"]);
       expect(spawn).toHaveBeenCalledWith(
         "wrangler",
-        ["dev"],
+        ["deploy", "--dry-run"],
         expect.any(Object),
       );
     });
 
-    it("should passthrough deploy to wrangler", async () => {
-      await route(["deploy", "--dry-run"]);
+    it("should passthrough tail shortcut to wrangler", async () => {
+      await route(["tail"]);
       expect(spawn).toHaveBeenCalledWith(
         "wrangler",
-        ["deploy", "--dry-run"],
+        ["tail"],
         expect.any(Object),
       );
     });
