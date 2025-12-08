@@ -1338,19 +1338,20 @@ export async function initWizard(
     console.log(`  ${colors.accent(`${pm} install`)}`);
   }
 
-  // Show dev command (scripts are already configured with --ip 0.0.0.0 if in dev container)
-  console.log(`  ${colors.accent(`${pm} run dev`)}`);
-
-  // Show helpful tip if in dev container
-  if (inDevContainer && product === "conductor") {
-    log.dim(
-      "  💡 Dev container detected — scripts configured for port forwarding",
-    );
-  }
-  log.newline();
-
+  // Show dev command - use ensemble conductor start for conductor projects
   if (product === "conductor") {
+    console.log(`  ${colors.accent("ensemble conductor start")}`);
+    log.dim(`  (or ${pm} run dev)`);
+    if (inDevContainer) {
+      log.dim(
+        "  💡 Dev container detected — auto-binds to 0.0.0.0 for port forwarding",
+      );
+    }
+    log.newline();
     console.log(`Then visit: ${colors.accent("http://localhost:8787/")}`);
+    log.newline();
+  } else {
+    console.log(`  ${colors.accent(`${pm} run dev`)}`);
     log.newline();
   }
 
