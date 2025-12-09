@@ -936,6 +936,17 @@ export async function initWizard(
       return;
     }
 
+    // Handle edgit specially - it's a global tool, not a project scaffolder
+    if (product === "edgit") {
+      console.log(
+        `${colors.success("✔")} ${PRODUCTS[product].name} - ${PRODUCTS[product].description}`,
+      );
+      log.newline();
+      // Don't show banner again - wizard already showed ensemble banner
+      await runEdgitInit(false);
+      return;
+    }
+
     // Show confirmation line
     console.log(
       `${colors.success("✔")} ${PRODUCTS[product].name} - ${PRODUCTS[product].description}`,
@@ -1435,8 +1446,147 @@ export async function conductorInit(options: InitOptions = {}): Promise<void> {
   await initWizard("conductor", options);
 }
 
-export async function edgitInit(options: InitOptions = {}): Promise<void> {
-  await initWizard("edgit", options);
+export async function edgitInit(_options: InitOptions = {}): Promise<void> {
+  // Edgit is a global tool that works on existing Git repos
+  // Unlike Conductor, it doesn't scaffold new projects
+  await runEdgitInit();
+}
+
+/**
+ * Run edgit init with proper checks
+ *
+ * Edgit is fundamentally different from Conductor:
+ * - Conductor scaffolds new projects (needs project name, directory, etc.)
+ * - Edgit is a global CLI tool that operates on existing Git repos
+ *
+ * Flow:
+ * 1. Check if edgit is installed globally → install if not
+ * 2. Check if in a git repo → explain if not
+ * 3. Run native `edgit init` to set up component versioning
+ *
+ * @param showBanner - Whether to show the edgit banner (false when called from wizard)
+ */
+async function runEdgitInit(showBanner = true): Promise<void> {
+  if (showBanner) {
+    banners.edgit();
+    log.newline();
+  }
+
+  // Step 1: Check if edgit is installed
+  const edgitInstalled = await checkEdgitInstalled();
+
+  if (!edgitInstalled) {
+    log.info("Edgit is not installed globally.");
+    log.newline();
+
+    const shouldInstall = await promptConfirm(
+      "Install edgit globally?",
+      true, // default to yes
+    );
+
+    if (!shouldInstall) {
+      log.newline();
+      log.plain("To install manually:");
+      console.log(`  ${colors.accent("npm install -g edgit")}`);
+      log.newline();
+      return;
+    }
+
+    log.newline();
+    const installSpinner = createSpinner(
+      "Installing edgit globally...",
+    ).start();
+
+    const installResult = await runCommandSilent("npm", [
+      "install",
+      "-g",
+      "edgit",
+    ]);
+
+    if (!installResult.success) {
+      installSpinner.error({ text: "Failed to install edgit" });
+      log.newline();
+      log.plain(installResult.stderr || "Unknown error");
+      log.newline();
+      log.plain("To install manually:");
+      console.log(`  ${colors.accent("npm install -g edgit")}`);
+      log.newline();
+      return;
+    }
+
+    installSpinner.success({ text: "Installed edgit globally" });
+    log.newline();
+  }
+
+  // Step 2: Check if in a git repo
+  const isGitRepo = await checkIsGitRepo();
+
+  if (!isGitRepo) {
+    log.warn("Not inside a Git repository.");
+    log.newline();
+    log.plain(
+      "Edgit is a Git-native component versioning tool that works on existing repositories.",
+    );
+    log.newline();
+    log.plain(colors.bold("To get started:"));
+    log.newline();
+    console.log(`  ${colors.dim("# Initialize a new Git repo")}`);
+    console.log(`  ${colors.accent("git init")}`);
+    console.log(`  ${colors.accent("ensemble edgit init")}`);
+    log.newline();
+    console.log(`  ${colors.dim("# Or navigate to an existing repo")}`);
+    console.log(`  ${colors.accent("cd my-project")}`);
+    console.log(`  ${colors.accent("ensemble edgit init")}`);
+    log.newline();
+    return;
+  }
+
+  // Step 3: Run native edgit init
+  log.info("Initializing edgit in current repository...");
+  log.newline();
+
+  // Delegate to native edgit CLI
+  const { spawn } = await import("node:child_process");
+
+  return new Promise((resolve) => {
+    const child = spawn("edgit", ["init"], {
+      stdio: "inherit",
+      shell: true,
+    });
+
+    child.on("close", (_code) => {
+      resolve();
+    });
+
+    child.on("error", (err) => {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        log.error("Edgit command not found after installation.");
+        log.newline();
+        log.plain("Try running directly:");
+        console.log(`  ${colors.accent("npx edgit init")}`);
+      }
+      resolve();
+    });
+  });
+}
+
+/**
+ * Check if edgit is installed globally
+ */
+async function checkEdgitInstalled(): Promise<boolean> {
+  const result = await runCommandSilent("edgit", ["--version"]);
+  return result.success;
+}
+
+/**
+ * Check if current directory is inside a git repository
+ */
+async function checkIsGitRepo(): Promise<boolean> {
+  const result = await runCommandSilent("git", [
+    "rev-parse",
+    "--is-inside-work-tree",
+  ]);
+  return result.success && result.stdout.trim() === "true";
 }
 
 export async function chamberInit(_options: InitOptions = {}): Promise<void> {

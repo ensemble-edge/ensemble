@@ -192,11 +192,13 @@ describe("router", () => {
       );
     });
 
-    it("should run edgit init wizard", async () => {
+    it("should run edgit init (delegates to native CLI)", async () => {
       await route(["edgit", "init"]);
 
-      expect(banners.ensemble).toHaveBeenCalled();
-      expect(writeFile).toHaveBeenCalledWith(
+      // Edgit now shows its own banner and delegates to native CLI
+      expect(banners.edgit).toHaveBeenCalled();
+      // Should NOT scaffold a project (edgit is a global tool)
+      expect(writeFile).not.toHaveBeenCalledWith(
         expect.stringContaining("package.json"),
         expect.stringContaining("@ensemble-edge/edgit"),
       );

@@ -169,11 +169,14 @@ describe("init wizard", () => {
   });
 
   describe("edgitInit", () => {
-    it("should create edgit project", async () => {
+    it("should show edgit banner and check git repo", async () => {
+      // edgitInit now delegates to native edgit CLI instead of scaffolding
       await edgitInit();
 
-      expect(banners.ensemble).toHaveBeenCalled();
-      expect(writeFile).toHaveBeenCalledWith(
+      // Should show edgit banner (not ensemble banner)
+      expect(banners.edgit).toHaveBeenCalled();
+      // Should NOT create package.json (edgit is a global tool)
+      expect(writeFile).not.toHaveBeenCalledWith(
         expect.stringContaining("package.json"),
         expect.stringContaining("@ensemble-edge/edgit"),
       );
