@@ -253,12 +253,13 @@ describe("router", () => {
       expect(banners.edgit).toHaveBeenCalled();
     });
 
-    it("should handle edgit tag commands internally", async () => {
-      // Tag commands are now handled internally (not delegated to npx)
-      // They will error if not in a git repo, which is expected in tests
-      await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
-      // In non-git-repo context, logs an error
-      expect(log.error).toHaveBeenCalledWith("Not a git repository");
+    it("should delegate edgit tag commands to native edgit", async () => {
+      // Tag commands are delegated to native edgit CLI
+      // This ensures proper registry integration and consistent behavior
+      await route(["edgit", "tag", "create", "extraction", "v1.0.0"]);
+      // Delegation happens via spawn - the native edgit will handle the command
+      // In test environment without edgit installed, spawn will be called
+      expect(spawn).toHaveBeenCalled();
     });
   });
 
