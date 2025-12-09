@@ -1,5 +1,11 @@
 # @ensemble-edge/ensemble
 
+## 0.1.15
+
+### Patch Changes
+
+- b53ca8f: - **Explicit Wrangler passthrough**: Use `ensemble wrangler <cmd>` for all Wrangler commands. Unknown commands now show helpful "Did you mean?" suggestions instead of silently failing.
+
 ## 0.1.14
 
 ### Patch Changes
