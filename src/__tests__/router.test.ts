@@ -253,13 +253,12 @@ describe("router", () => {
       expect(banners.edgit).toHaveBeenCalled();
     });
 
-    it("should delegate edgit tag to npx", async () => {
+    it("should handle edgit tag commands internally", async () => {
+      // Tag commands are now handled internally (not delegated to npx)
+      // They will error if not in a git repo, which is expected in tests
       await route(["edgit", "tag", "create", "prompt", "v1.0.0"]);
-      expect(spawn).toHaveBeenCalledWith(
-        "npx",
-        ["edgit", "tag", "create", "prompt", "v1.0.0"],
-        expect.any(Object),
-      );
+      // In non-git-repo context, logs an error
+      expect(log.error).toHaveBeenCalledWith("Not a git repository");
     });
   });
 

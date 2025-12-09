@@ -819,18 +819,21 @@ export async function conductorStatus(args: string[]): Promise<void> {
  */
 export function showConductorHelp(): void {
   banners.conductor();
-  console.log(`${colors.bold("Commands:")}
+  console.log(`${colors.bold("Development:")}
   init [name]     Create a new Conductor project
   start           Start development server (smart defaults)
   stop            Stop development server
   restart         Restart development server
   info            Show project info and component counts
   status          Alias for info
-  deploy          Deploy to production
-  validate        Validate configuration
-  exec            Execute agents
-  docs            Generate API documentation
-  test            Run tests
+
+${colors.bold("Deployment:")}
+  deploy          Interactive deployment wizard
+  rollback        Rollback to a previous version
+  sync            Sync/verify infrastructure state
+  catalog         Show what's deployed
+  validate        Validate component references
+  gc              Clean up old version tags
 
 ${colors.bold("Start Options:")}
   --port, -p <n>  Server port (default: 8787, auto-finds if busy)
@@ -846,6 +849,15 @@ ${colors.bold("Info Options:")}
   --compact       Compact single-line format
   --no-health-check  Skip worker health ping
 
+${colors.bold("Deploy Options:")}
+  --env, -e <env>  Target environment (staging, production, main)
+  --dry-run        Show what would be deployed
+  -y, --yes        Skip confirmation prompts
+
+${colors.bold("GC Options:")}
+  --keep <n>       Keep last n versions (default: 10)
+  --dry-run        Preview deletions without removing
+
 ${colors.bold("Init Options:")}
   --setup <type>  Project setup: full, starter, basic (default: full)
   --examples      Include example agents & ensembles (same as --setup full)
@@ -858,10 +870,11 @@ ${colors.bold("Init Options:")}
 ${colors.bold("Examples:")}
   ${colors.accent("ensemble conductor init my-project")}
   ${colors.accent("ensemble conductor start")}
-  ${colors.accent("ensemble conductor start --port 3000")}
-  ${colors.accent("ensemble conductor stop")}
-  ${colors.accent("ensemble conductor info")}
-  ${colors.accent("ensemble conductor info --compact")}
+  ${colors.accent("ensemble conductor deploy")}          ${colors.dim("(interactive wizard)")}
+  ${colors.accent("ensemble conductor deploy --env staging")}
+  ${colors.accent("ensemble conductor rollback")}        ${colors.dim("(interactive)")}
+  ${colors.accent("ensemble conductor catalog")}         ${colors.dim("(show deployed state)")}
+  ${colors.accent("ensemble conductor gc --keep 5")}     ${colors.dim("(keep last 5 versions)")}
 
 ${colors.dim("Docs:")} ${colors.underline("https://docs.ensemble.ai/conductor")}
 `);
@@ -905,6 +918,42 @@ export async function routeConductorCommand(args: string[]): Promise<void> {
       // 'info' is the official command, 'status' is an alias for user convenience
       await conductorStatus(subArgs);
       break;
+    case "deploy": {
+      // Interactive deployment wizard
+      const { conductorDeploy } = await import("./deploy.js");
+      await conductorDeploy(subArgs);
+      break;
+    }
+    case "rollback": {
+      // Rollback to previous version
+      const { conductorRollback } = await import("./deploy.js");
+      await conductorRollback(subArgs);
+      break;
+    }
+    case "sync": {
+      // Sync/verify infrastructure
+      const { conductorSync } = await import("./deploy.js");
+      await conductorSync(subArgs);
+      break;
+    }
+    case "catalog": {
+      // Show what's deployed
+      const { conductorCatalog } = await import("./deploy.js");
+      await conductorCatalog(subArgs);
+      break;
+    }
+    case "validate": {
+      // Validate component references
+      const { conductorValidate } = await import("./deploy.js");
+      await conductorValidate(subArgs);
+      break;
+    }
+    case "gc": {
+      // Garbage collect old version tags
+      const { conductorGc } = await import("./deploy.js");
+      await conductorGc(subArgs);
+      break;
+    }
     default:
       // For other commands, delegate to the conductor CLI
       // This will be handled by the existing runConductor in router.ts

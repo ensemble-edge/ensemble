@@ -31,7 +31,16 @@ import {
   conductorStatus,
   showConductorHelp as conductorHelp,
 } from "./commands/conductor.js";
-import { edgitStatus, showEdgitHelp as edgitHelp } from "./commands/edgit.js";
+import {
+  edgitStatus,
+  showEdgitHelp as edgitHelp,
+  tagList,
+  tagCreate,
+  tagMove,
+  tagDelete,
+  showTagHelp,
+  edgitPush,
+} from "./commands/edgit.js";
 import { runUpgrade, showUpgradeHelp } from "./commands/upgrade.js";
 
 /**
@@ -160,8 +169,8 @@ export async function route(argv: string[]): Promise<void> {
     return;
   }
 
-  // Handle configure command
-  if (cmd === "configure") {
+  // Handle configure command (setup is an alias)
+  if (cmd === "configure" || cmd === "setup") {
     await routeConfigure(args);
     return;
   }
@@ -332,6 +341,8 @@ async function runConductor(args: string[]): Promise<void> {
  * Command Naming:
  * - `info` shows Edgit project info (official command, matches Edgit CLI)
  * - `status` passes through to git (since edgit is git-native, status = git status)
+ * - `tag` manages deployment tags (create, move, list, delete)
+ * - `push` pushes to remote with optional --tags flag
  */
 async function runEdgit(args: string[]): Promise<void> {
   const [subCmd, ...subArgs] = args;
@@ -354,6 +365,41 @@ async function runEdgit(args: string[]): Promise<void> {
     await spawnCommand("git", ["status", ...subArgs], {
       notFoundMessage: "Git not found. Make sure Git is installed.",
     });
+    return;
+  }
+
+  // Handle tag commands internally
+  if (subCmd === "tag") {
+    const [tagSubCmd, ...tagArgs] = subArgs;
+
+    if (!tagSubCmd || tagSubCmd === "--help" || tagSubCmd === "-h") {
+      showTagHelp();
+      return;
+    }
+
+    switch (tagSubCmd) {
+      case "list":
+        await tagList(tagArgs);
+        return;
+      case "create":
+        await tagCreate(tagArgs);
+        return;
+      case "move":
+        await tagMove(tagArgs);
+        return;
+      case "delete":
+        await tagDelete(tagArgs);
+        return;
+      default:
+        log.error(`Unknown tag command: ${tagSubCmd}`);
+        log.dim("Run 'ensemble edgit tag --help' for available commands.");
+        return;
+    }
+  }
+
+  // Handle push command internally
+  if (subCmd === "push") {
+    await edgitPush(subArgs);
     return;
   }
 
@@ -537,7 +583,14 @@ async function routeConfigure(args: string[]): Promise<void> {
   const options = {
     yes: restArgs.includes("-y") || restArgs.includes("--yes"),
     provider: parseProvider(restArgs),
+    status: args.includes("--status"),
   };
+
+  // Handle --status as a top-level flag (ensemble configure --status)
+  if (options.status && !subCmd) {
+    await configure(undefined, options);
+    return;
+  }
 
   // Route to configure handler
   await configure(subCmd, options);

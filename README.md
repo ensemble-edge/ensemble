@@ -127,12 +127,12 @@ ensemble edgit tag list
 ensemble edgit components list
 ensemble edgit components add prompts/greeting.md
 
-# Manage deployments
-ensemble edgit deploy set prompt prod
-ensemble edgit deploy list
+# Set environment tags and push
+ensemble edgit tag set prompt prod v1.0.0
+ensemble edgit push --tags --force
 
-# View version history
-ensemble edgit history prompt
+# View tags and versions
+ensemble edgit tag list prompt
 ```
 
 ### Status Options

@@ -215,7 +215,11 @@ async function detectPackagesInDir(dir: string): Promise<PackageInfo[]> {
       }
 
       // Resolve actual installed version (handles "latest", "*", etc.)
-      const installedVersion = await resolveInstalledVersion(dir, name, version);
+      const installedVersion = await resolveInstalledVersion(
+        dir,
+        name,
+        version,
+      );
 
       packages.push({
         name,
